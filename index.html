@@ -165,7 +165,7 @@ function sheetRead(url){
     const script=document.createElement("script");
     const timer=setTimeout(()=>{
       cleanup();
-      reject(new Error("Timeout — check Apps Script is deployed as 'Anyone'"));
+      reject(new Error("Timeout — script loaded but callback never fired (response may be too large)"));
     },20000);
     function cleanup(){
       clearTimeout(timer);
@@ -174,13 +174,14 @@ function sheetRead(url){
     }
     window[cbName]=function(data){
       cleanup();
-      if(!data) reject(new Error("Empty response from sheet"));
-      else if(data.error) reject(new Error(String(data.error)));
+      if(!data) reject(new Error("Callback received null/undefined"));
+      else if(typeof data==="string") reject(new Error("Got string instead of object: "+data.slice(0,100)));
+      else if(data.error) reject(new Error("Script error: "+String(data.error)));
       else resolve(data);
     };
     script.onerror=()=>{
       cleanup();
-      reject(new Error("Could not reach Apps Script — check the URL"));
+      reject(new Error("Script tag failed to load"));
     };
     script.src=`${url}?action=read&callback=${cbName}&t=${Date.now()}`;
     document.head.appendChild(script);
@@ -696,16 +697,20 @@ function App(){
   // On first load: if a sheet URL is saved, read from sheet before allowing any writes
   useEffect(()=>{
     if(!sheetUrl){syncReady.current=true;return;}
-    // Check if this browser has existing local data
     const hasLocalData=!!localStorage.getItem(TX_KEY);
     if(hasLocalData){
-      // Already have data locally — safe to write, just mark ready
+      // This browser already has data — it's the source of truth, writes are safe
       syncReady.current=true;
     } else {
-      // Fresh browser — pull from sheet first, THEN allow writes
+      // Fresh browser — pull from sheet first
       setSyncStatus("syncing");
-      syncFromSheet(true).then(()=>{
+      syncFromSheet(true).then((sheetHadData)=>{
         syncReady.current=true;
+        // If sheet had no data and this is a fresh browser, don't auto-write defaults
+        // User needs to manually push from their main device first
+        if(!sheetHadData){
+          setSyncStatus("idle");
+        }
       });
     }
   },[]);
@@ -747,10 +752,11 @@ function App(){
   }
 
   async function syncFromSheet(silent=false){
-    if(!sheetUrl)return;
+    if(!sheetUrl)return false;
     setSyncStatus("syncing");
     try{
       const data=await sheetRead(sheetUrl);
+      const sheetHadData=!!(data.transactions?.length||data.accounts?.length);
       if(data.transactions?.length){
         nextId=Math.max(...data.transactions.map(t=>Number(t.id)||0),17)+1;
         setTransactions(data.transactions.map(t=>({...t,id:Number(t.id),amount:Number(t.amount)})));
@@ -775,11 +781,13 @@ function App(){
       setLastSync(new Date());
       setTimeout(()=>setSyncStatus("idle"),3000);
       if(!silent) showToast("Synced from Google Sheets ✓");
+      return sheetHadData;
     }catch(err){
       console.error("Sheet load failed:",err);
       setSyncStatus("error");
       const msg=err instanceof Error?err.message:String(err);
       if(!silent) showToast("Sync failed: "+msg,false);
+      return false;
     }
   }
 
@@ -801,8 +809,15 @@ function App(){
     }
     window[cbName]=d=>{
       cleanup();
-      if(d&&d.ok) setTestResult({ok:true,msg:"Connected ✓ Script is reachable"});
-      else setTestResult({ok:false,msg:"Error: "+String(d?.error||"unknown response")});
+      if(d&&d.ok){
+        const txCount=d.transactions?.length??0;
+        if(txCount>0)
+          setTestResult({ok:true,msg:`Connected ✓  —  ${txCount} transactions found in sheet`});
+        else
+          setTestResult({ok:true,msg:"Connected ✓  —  Sheet is empty (no data saved yet). Connect from your main device first to push data, then connect here to pull it."});
+      } else {
+        setTestResult({ok:false,msg:"Error: "+String(d?.error||"unknown response")});
+      }
       setTestingConn(false);
     };
     script.onerror=()=>{
@@ -810,7 +825,8 @@ function App(){
       setTestResult({ok:false,msg:"Blocked — set 'Who has access' to 'Anyone' in deployment"});
       setTestingConn(false);
     };
-    script.src=`${url}?action=ping&callback=${cbName}&t=${Date.now()}`;
+    // Use action=read so we can see how much data is in the sheet
+    script.src=`${url}?action=read&callback=${cbName}&t=${Date.now()}`;
     document.head.appendChild(script);
   }
 
