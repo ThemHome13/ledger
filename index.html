@@ -712,21 +712,23 @@ function App(){
   useEffect(()=>{save(SCHED_KEY,scheduled);},[scheduled]);
   useEffect(()=>{save(WB_KEY,wb);},[wb]);
 
-  // On first load: if a sheet URL is saved, read from sheet before allowing any writes
+  // On load: if sheet URL is configured, ALWAYS pull from sheet first (sheet = source of truth)
+  // Only allow writes after the pull completes
   useEffect(()=>{
-    if(!sheetUrl){syncReady.current=true;return;}
-    const hasLocalData=!!localStorage.getItem(TX_KEY);
-    if(hasLocalData){
+    if(!sheetUrl){
       syncReady.current=true;
-    } else {
-      setSyncStatus("syncing");
-      syncFromSheet(true).then(()=>{
-        // Wait 3s after read completes before allowing any writes
-        // This ensures React has re-rendered with sheet data and
-        // the write debounce closure captures the correct values
-        setTimeout(()=>{ syncReady.current=true; }, 3000);
-      });
+      return;
     }
+    // Always read from sheet on load — don't trust local cache
+    setSyncStatus("syncing");
+    syncFromSheet(true).then(()=>{
+      // Wait 3s after read so React re-renders and localStorage is written
+      // before any write debounce fires
+      setTimeout(()=>{ syncReady.current=true; }, 3000);
+    }).catch(()=>{
+      // If sheet read fails, fall back to local data but allow writes
+      syncReady.current=true;
+    });
   },[]);
 
   // Debounced sync to Google Sheets — only fires if syncReady AND
@@ -776,22 +778,26 @@ function App(){
     setSyncStatus("syncing");
     try{
       const data=await sheetRead(sheetUrl);
-      const sheetHadData=!!(data.transactions?.length||data.accounts?.length);
-      if(data.transactions?.length){
-        nextId=Math.max(...data.transactions.map(t=>Number(t.id)||0),17)+1;
+      // Always apply whatever the sheet returns — it is the source of truth
+      if(Array.isArray(data.transactions)){
+        nextId=data.transactions.length
+          ? Math.max(...data.transactions.map(t=>Number(t.id)||0),17)+1
+          : 18;
         setTransactions(data.transactions.map(t=>({...t,id:Number(t.id),amount:Number(t.amount)})));
       }
-      if(data.scheduled?.length){
-        nextSchedId=Math.max(...data.scheduled.map(s=>parseInt(String(s.id).replace("s",""))||0),9)+1;
+      if(Array.isArray(data.scheduled)){
+        nextSchedId=data.scheduled.length
+          ? Math.max(...data.scheduled.map(s=>parseInt(String(s.id).replace("s",""))||0),9)+1
+          : 10;
         setScheduled(data.scheduled.map(s=>({isIncome:false,...s,amount:Number(s.amount)})));
       }
-      if(data.accounts?.length){
+      if(Array.isArray(data.accounts)&&data.accounts.length){
         setAccounts(data.accounts.map(a=>({...a,startBalance:Number(a.startBalance)})));
       }
-      if(data.categories?.length){
+      if(Array.isArray(data.categories)&&data.categories.length){
         setCategories(data.categories);
       }
-      if(data.weekly_budget?.length){
+      if(Array.isArray(data.weekly_budget)&&data.weekly_budget.length){
         const decoded=decodeWb(data.weekly_budget);
         if(decoded.bills)nextWbId=Math.max(...decoded.bills.map(b=>parseInt(String(b.id).replace("wb",""))||0),9)+1;
         if(decoded.weekTx)nextWtxId=Math.max(...decoded.weekTx.map(t=>parseInt(String(t.id).replace("wt",""))||0),0)+1;
@@ -801,7 +807,7 @@ function App(){
       setLastSync(new Date());
       setTimeout(()=>setSyncStatus("idle"),3000);
       if(!silent) showToast("Synced from Google Sheets ✓");
-      return sheetHadData;
+      return true;
     }catch(err){
       console.error("Sheet load failed:",err);
       setSyncStatus("error");
