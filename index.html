@@ -668,6 +668,8 @@ function App(){
   const [csvModal,setCsvModal]=useState(false);
   const [confirmModal,setConfirmModal]=useState(null);
   const [settingsOpen,setSettingsOpen]=useState(false);
+  const [testingConn,setTestingConn]=useState(false);
+  const [testResult,setTestResult]=useState(null);
   const [sheetUrl,setSheetUrl]=useState(loadSheetUrl);
   const [sheetUrlInput,setSheetUrlInput]=useState(loadSheetUrl);
   const [syncStatus,setSyncStatus]=useState("idle"); // idle|syncing|ok|error
@@ -779,6 +781,37 @@ function App(){
       const msg=err instanceof Error?err.message:String(err);
       if(!silent) showToast("Sync failed: "+msg,false);
     }
+  }
+
+  function testConnection(){
+    const url=sheetUrlInput.trim();
+    if(!url||testingConn)return;
+    setTestingConn(true);setTestResult(null);
+    const cbName="__ledgerTest_"+Date.now();
+    const script=document.createElement("script");
+    const timer=setTimeout(()=>{
+      cleanup();
+      setTestResult({ok:false,msg:"Timeout — check 'Anyone' access in deployment"});
+      setTestingConn(false);
+    },10000);
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cbName];
+      if(script.parentNode)script.parentNode.removeChild(script);
+    }
+    window[cbName]=d=>{
+      cleanup();
+      if(d&&d.ok) setTestResult({ok:true,msg:"Connected ✓ Script is reachable"});
+      else setTestResult({ok:false,msg:"Error: "+String(d?.error||"unknown response")});
+      setTestingConn(false);
+    };
+    script.onerror=()=>{
+      cleanup();
+      setTestResult({ok:false,msg:"Blocked — set 'Who has access' to 'Anyone' in deployment"});
+      setTestingConn(false);
+    };
+    script.src=`${url}?action=ping&callback=${cbName}&t=${Date.now()}`;
+    document.head.appendChild(script);
   }
 
   function saveSheetUrlAndConnect(url){
@@ -2183,45 +2216,15 @@ function App(){
               <div>
                 <label className="lbl">Apps Script Web App URL</label>
                 <input className="input-field" placeholder="https://script.google.com/macros/s/…/exec"
-                  value={sheetUrlInput} onChange={e=>setSheetUrlInput(e.target.value)}/>
+                  value={sheetUrlInput} onChange={e=>{setSheetUrlInput(e.target.value);setTestResult(null);}}/>
               </div>
-              {/* Test connection */}
-              {sheetUrlInput&&(()=>{
-                const [testResult,setTestResult]=React.useState(null);
-                const [testing,setTesting]=React.useState(false);
-                function testConn(){
-                  if(!sheetUrlInput.trim()||testing)return;
-                  setTesting(true);setTestResult(null);
-                  const cbName="__ledgerTest_"+Date.now();
-                  const script=document.createElement("script");
-                  const timer=setTimeout(()=>{
-                    delete window[cbName];if(script.parentNode)script.parentNode.removeChild(script);
-                    setTestResult({ok:false,msg:"Timeout — check URL and 'Anyone' access"});setTesting(false);
-                  },10000);
-                  window[cbName]=d=>{
-                    clearTimeout(timer);delete window[cbName];if(script.parentNode)script.parentNode.removeChild(script);
-                    if(d&&d.ok) setTestResult({ok:true,msg:"Connected! Script is reachable."});
-                    else setTestResult({ok:false,msg:"Error: "+String(d?.error||"unknown")});
-                    setTesting(false);
-                  };
-                  script.onerror=()=>{
-                    clearTimeout(timer);delete window[cbName];if(script.parentNode)script.parentNode.removeChild(script);
-                    setTestResult({ok:false,msg:"Script blocked — make sure access is set to 'Anyone' (not 'Anyone with Google account')"});
-                    setTesting(false);
-                  };
-                  script.src=`${sheetUrlInput.trim()}?action=ping&callback=${cbName}&t=${Date.now()}`;
-                  document.head.appendChild(script);
-                }
-                return(
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <button onClick={testConn} disabled={testing}
-                      style={{background:"#1a1a28",border:"1px solid #2a2a40",color:testing?"#555":"#aaa",borderRadius:8,padding:"7px 14px",cursor:testing?"not-allowed":"pointer",fontFamily:"DM Mono",fontSize:11}}>
-                      {testing?"Testing…":"Test Connection"}
-                    </button>
-                    {testResult&&<span style={{fontSize:11,color:testResult.ok?"#4ade80":"#f87171"}}>{testResult.ok?"✓":"✗"} {testResult.msg}</span>}
-                  </div>
-                );
-              })()}
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <button onClick={testConnection} disabled={!sheetUrlInput.trim()||testingConn}
+                  style={{background:"#1a1a28",border:"1px solid #2a2a40",color:testingConn?"#555":"#a78bfa",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontFamily:"DM Mono",fontSize:12,opacity:(!sheetUrlInput.trim()||testingConn)?0.5:1}}>
+                  {testingConn?"Testing…":"Test Connection"}
+                </button>
+                {testResult&&<span style={{fontSize:11,color:testResult.ok?"#4ade80":"#f87171",flex:1}}>{testResult.ok?"✓":"✗"} {testResult.msg}</span>}
+              </div>
               <div style={{padding:"12px 14px",background:"#0d0d18",borderRadius:10,border:"1px solid #1e1e30",fontSize:11,color:"#555",lineHeight:1.9}}>
                 <div style={{color:"#aaa",fontWeight:600,marginBottom:4}}>Setup steps:</div>
                 <div>1. Open your Google Sheet → <strong style={{color:"#e8e6f0"}}>Extensions → Apps Script</strong></div>
