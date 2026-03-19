@@ -1149,9 +1149,23 @@ function App(){
   }
 
   // Current week (Fri-Thu) — filtered by selected account
-  const weekSchedBills=getSchedBillsForWindow(weekStart)
+  const weekSchedBillsAll=getSchedBillsForWindow(weekStart)
     .filter(b=>wbAccount==="all"||b.account===wbAccount);
-  const wbBillTotal=weekSchedBills.reduce((s,b)=>s+b.amount,0);
+
+  // Mark each bill as paid if a matching transaction exists this week
+  // Matches by scheduledId OR by description + account + amount within the week window
+  const weekSchedBills=weekSchedBillsAll.map(b=>{
+    const paid=transactions.some(t=>
+      t.date>=weekStartStr&&t.date<=weekEndStr&&
+      (t.scheduledId===b.id||
+       (t.desc===b.desc&&t.account===b.account&&Math.abs(t.amount+b.amount)<0.01))
+    );
+    return{...b,paid};
+  });
+
+  const wbBillTotal=weekSchedBills.reduce((s,b)=>s+b.amount,0);       // all bills
+  const wbBillPaid=weekSchedBills.filter(b=>b.paid).reduce((s,b)=>s+b.amount,0);   // already paid
+  const wbBillUnpaid=weekSchedBills.filter(b=>!b.paid).reduce((s,b)=>s+b.amount,0); // still owed
   // Current income: per-account if one selected, else sum of all account incomes
   const currentIncome=(()=>{
     if(wbAccount==="all"){
@@ -1160,20 +1174,37 @@ function App(){
     return wb.incomeByAccount?.[wbAccount]??wb.income;
   })();
 
-  // Current account balance(s)
+  // Balance at the START of this week (Friday) — only transactions before weekStartStr count
+  // This stays fixed throughout the week so projections are stable
+  const weekStartBalance=(()=>{
+    const balanceForAcct=id=>{
+      const acct=acctById(id);
+      return acct.startBalance+transactions
+        .filter(t=>t.account===id&&t.date<weekStartStr)
+        .reduce((s,t)=>s+t.amount,0);
+    };
+    if(wbAccount==="all") return accounts.reduce((s,a)=>s+balanceForAcct(a.id),0);
+    return balanceForAcct(wbAccount);
+  })();
+
+  // Live current balance (updates as transactions are added)
   const currentBalance=(()=>{
     if(wbAccount==="all") return accounts.reduce((s,a)=>s+acctBalance(a.id),0);
     return acctBalance(wbAccount);
   })();
 
-  const wbAvailable=currentIncome-wbBillTotal;
   const wbSpent=wb.weekTx
     .filter(t=>wbAccount==="all"||t.account===wbAccount)
     .reduce((s,t)=>s+t.amount,0);
-  const wbRemaining=wbAvailable-wbSpent;
 
-  // Projected balance at end of this week: current balance + income - bills - weekly spending
-  const projectedBalanceWeek1=currentBalance+currentIncome-wbBillTotal-wbSpent;
+  // Available = current balance minus unpaid bills minus weekly spending already tracked
+  // This updates live as transactions come in and bills get marked paid
+  const wbAvailable=currentBalance-wbBillUnpaid-wbSpent;
+  const wbRemaining=wbAvailable; // same thing — available IS what's remaining
+
+  // End-of-week: current balance already has paid bills taken out,
+  // so only subtract the UNPAID bills still coming + weekly spending
+  const projectedBalanceWeek1=currentBalance-wbBillUnpaid-wbSpent;
 
   // Next week window (Fri+7 → Thu+7)
   const nextWeekStart=new Date(weekStart); nextWeekStart.setDate(weekStart.getDate()+7);
@@ -1190,8 +1221,8 @@ function App(){
   // 2-week combined
   const twoWeekBillTotal=wbBillTotal+nextWeekBillTotal;
   const twoWeekAvailable=(currentIncome*2)-twoWeekBillTotal;
-  // Weeks where bills exceed balance+income (danger — can't actually pay)
-  const thisWeekOver=(currentBalance+currentIncome)<wbBillTotal;
+  // Weeks where bills exceed available funds (danger)
+  const thisWeekOver=projectedBalanceWeek1<0;
   const nextWeekOver=(projectedBalanceWeek1+currentIncome)<nextWeekBillTotal;
 
   function addWbTx(){
@@ -2026,14 +2057,20 @@ function App(){
             </div>
 
             {/* ── Overspend alerts ── */}
-            {(thisWeekOver||nextWeekOver)&&(
+            {(thisWeekOver||nextWeekOver||nextWeekTight)&&(
               <div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:8}}>
                 {thisWeekOver&&(
                   <div style={{padding:"12px 14px",background:"#f8717112",border:"1px solid #f8717144",borderRadius:10,display:"flex",gap:10,alignItems:"flex-start"}}>
                     <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
                     <div>
-                      <div style={{fontSize:12,color:"#f87171",fontWeight:600,marginBottom:2}}>Bills exceed income this week!</div>
-                      <div style={{fontSize:11,color:"#f8717199"}}>Bills {fmt(wbBillTotal)} vs balance + income {fmt(currentBalance+currentIncome)} — you're short {fmt(wbBillTotal-(currentBalance+currentIncome))}. Consider holding off on discretionary spending.</div>
+                      <div style={{fontSize:12,color:"#f87171",fontWeight:600,marginBottom:2}}>Can't cover remaining bills this week</div>
+                      <div style={{fontSize:11,color:"#f8717199",lineHeight:1.6}}>
+                        Current balance {fmt(currentBalance)}
+                        {wbBillPaid>0&&<span> · <span style={{color:"#4ade8099"}}>✓ {fmt(wbBillPaid)} already paid</span></span>}
+                        {wbBillUnpaid>0&&<span> · <span style={{color:"#f87171"}}>{fmt(wbBillUnpaid)} still owed</span></span>}
+                        {wbSpent>0&&<span> · {fmt(wbSpent)} spent this week</span>}
+                        . You're short {fmt(Math.abs(projectedBalanceWeek1))} by end of week.
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2041,15 +2078,19 @@ function App(){
                   <div style={{padding:"12px 14px",background:"#f59e0b12",border:"1px solid #f59e0b44",borderRadius:10,display:"flex",gap:10,alignItems:"flex-start"}}>
                     <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
                     <div>
-                      <div style={{fontSize:12,color:"#f59e0b",fontWeight:600,marginBottom:2}}>Heavy bills coming next week</div>
-                      <div style={{fontSize:11,color:"#f59e0b99"}}>Next week ({fmtDate(nextWeekStart)}–{fmtDate(nextWeekEnd)}) has {fmt(nextWeekBillTotal)} in bills vs projected balance + income {fmt(projectedBalanceWeek1+currentIncome)} — short {fmt(nextWeekBillTotal-(projectedBalanceWeek1+currentIncome))}. Spend carefully this week.</div>
+                      <div style={{fontSize:12,color:"#f59e0b",fontWeight:600,marginBottom:2}}>Next week bills exceed projected balance</div>
+                      <div style={{fontSize:11,color:"#f59e0b99",lineHeight:1.6}}>
+                        Projected start balance {fmt(projectedBalanceWeek1)} + income {fmt(currentIncome)} = {fmt(projectedBalanceWeek1+currentIncome)}, but next week has {fmt(nextWeekBillTotal)} in bills ({nextWeekBills.map(b=>b.desc).join(", ")}). Short by {fmt(Math.abs(nextWeekBillTotal-(projectedBalanceWeek1+currentIncome)))}. Spend carefully this week.
+                      </div>
                     </div>
                   </div>
                 )}
-                {!thisWeekOver&&nextWeekTight&&(
+                {!thisWeekOver&&!nextWeekOver&&nextWeekTight&&(
                   <div style={{padding:"12px 14px",background:"#f59e0b0a",border:"1px solid #f59e0b33",borderRadius:10,display:"flex",gap:10,alignItems:"flex-start"}}>
                     <span style={{fontSize:15,flexShrink:0}}>💡</span>
-                    <div style={{fontSize:11,color:"#f59e0b99"}}>Next week leaves only {fmt(nextWeekAvailable)} after bills — consider saving some of this week's available budget.</div>
+                    <div style={{fontSize:11,color:"#f59e0b99",lineHeight:1.6}}>
+                      Next week is tight — {fmt(nextWeekBillTotal)} in bills leaves only {fmt(nextWeekAvailable)} from income. Projected balance going in: {fmt(projectedBalanceWeek1)}. Consider holding back some spending this week.
+                    </div>
                   </div>
                 )}
               </div>
@@ -2058,13 +2099,13 @@ function App(){
             {/* ── 4 Summary Boxes ── */}
             <div className="grid-budget" style={{gap:12,marginBottom:20}}>
               {/* Box 0: Current Balance */}
-              <div className="budget-box" style={{border:`1px solid ${currentBalance>=0?"#60a5fa33":"#f8717133"}`}}>
-                <div className="accent" style={{background:`linear-gradient(90deg,${currentBalance>=0?"#60a5fa":"#f87171"},${currentBalance>=0?"#60a5fa44":"#f8717144"})`}}/>
+              <div className="budget-box" style={{border:`1px solid ${weekStartBalance>=0?"#60a5fa33":"#f8717133"}`}}>
+                <div className="accent" style={{background:`linear-gradient(90deg,${weekStartBalance>=0?"#60a5fa":"#f87171"},${weekStartBalance>=0?"#60a5fa44":"#f8717144"})`}}/>
                 <div style={{fontSize:10,color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>
                   {wbAccount==="all"?"Total Balance":acctById(wbAccount).label}
                 </div>
-                <div style={{fontSize:22,fontWeight:700,color:currentBalance>=0?"#60a5fa":"#f87171",fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em"}}>{fmt(currentBalance)}</div>
-                <div style={{fontSize:10,color:"#555",marginTop:4}}>Current account balance</div>
+                <div style={{fontSize:22,fontWeight:700,color:weekStartBalance>=0?"#60a5fa":"#f87171",fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em"}}>{fmt(weekStartBalance)}</div>
+                <div style={{fontSize:10,color:"#555",marginTop:4}}>Balance at start of week ({fmtDate(weekStart)})</div>
               </div>
 
               {/* Box 1: Weekly Income — per account or global */}
@@ -2097,32 +2138,43 @@ function App(){
                   −{fmt(wbBillTotal)}
                   {thisWeekOver&&<span style={{fontSize:12,marginLeft:6}}>⚠️</span>}
                 </div>
-                <div style={{fontSize:10,color:"#555",marginTop:4,lineHeight:1.5}}>
-                  {weekSchedBills.length>0?weekSchedBills.map(b=>b.desc).join(", "):"No bills this week"}
+                <div style={{fontSize:10,marginTop:4,lineHeight:1.6}}>
+                  {wbBillPaid>0&&<span style={{color:"#4ade80"}}>✓ {fmt(wbBillPaid)} paid</span>}
+                  {wbBillPaid>0&&wbBillUnpaid>0&&<span style={{color:"#555"}}> · </span>}
+                  {wbBillUnpaid>0&&<span style={{color:"#f87171"}}>−{fmt(wbBillUnpaid)} remaining</span>}
+                  {wbBillTotal===0&&<span style={{color:"#555"}}>No bills this week</span>}
                 </div>
               </div>
 
-              {/* Box 3: Projected end-of-week balance */}
-              <div className="budget-box" style={{border:`1px solid ${projectedBalanceWeek1>=0?"#7c6fff33":"#f8717166"}`}}>
-                <div className="accent" style={{background:`linear-gradient(90deg,${projectedBalanceWeek1>=0?"#7c6fff":"#f87171"},${projectedBalanceWeek1>=0?"#7c6fff44":"#f8717144"})`}}/>
-                <div style={{fontSize:10,color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>End of Week Est.</div>
-                <div style={{fontSize:22,fontWeight:700,color:projectedBalanceWeek1>=0?"#7c6fff":"#f87171",fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em"}}>{fmt(projectedBalanceWeek1)}</div>
-                <div style={{fontSize:10,color:"#555",marginTop:4}}>Balance + income − bills − spent</div>
+              {/* Box 3: Available to spend (live — updates as bills paid and spending added) */}
+              <div className="budget-box" style={{border:`1px solid ${wbAvailable>=0?"#7c6fff33":"#f8717166"}`}}>
+                <div className="accent" style={{background:`linear-gradient(90deg,${wbAvailable>=0?"#7c6fff":"#f87171"},${wbAvailable>=0?"#7c6fff44":"#f8717144"})`}}/>
+                <div style={{fontSize:10,color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>Available to Spend</div>
+                <div style={{fontSize:22,fontWeight:700,color:wbAvailable>=0?"#7c6fff":"#f87171",fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em"}}>{fmt(wbAvailable)}</div>
+                <div style={{fontSize:10,color:"#555",marginTop:4,lineHeight:1.5}}>
+                  {wbBillUnpaid>0
+                    ?<span>After <span style={{color:"#f87171"}}>{fmt(wbBillUnpaid)} unpaid bills</span> &amp; spending</span>
+                    :<span>All bills paid — after spending</span>}
+                </div>
               </div>
             </div>
 
-            {/* Progress bar */}
-            {wbAvailable>0&&(
-              <div style={{marginBottom:20}}>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#555",marginBottom:5}}>
-                  <span>Spent {Math.min(100,Math.round((wbSpent/wbAvailable)*100))}% of available</span>
-                  <span style={{color:wbRemaining>=0?"#4ade80":"#f87171"}}>{fmt(wbRemaining)} left</span>
+            {/* Progress bar — shows spending vs available */}
+            {(()=>{
+              const totalSpendable=currentBalance-wbBillUnpaid;
+              const pct=totalSpendable>0?Math.min(100,Math.round((wbSpent/totalSpendable)*100)):0;
+              return totalSpendable>0&&(
+                <div style={{marginBottom:20}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#555",marginBottom:5}}>
+                    <span>{wbSpent>0?`Spent ${fmt(wbSpent)} (${pct}% of spendable)`:"Nothing spent yet"}</span>
+                    <span style={{color:wbAvailable>=0?"#4ade80":"#f87171"}}>{fmt(wbAvailable)} left</span>
+                  </div>
+                  <div style={{height:6,background:"#1e1e30",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pct}%`,background:wbAvailable>=0?"#7c6fff":"#f87171",borderRadius:3,transition:"width .4s ease"}}/>
+                  </div>
                 </div>
-                <div style={{height:6,background:"#1e1e30",borderRadius:3,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${Math.min(100,(wbSpent/wbAvailable)*100)}%`,background:wbRemaining>=0?"#f59e0b":"#f87171",borderRadius:3,transition:"width .4s ease"}}/>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ── 2-Week Outlook ── */}
             <div style={{marginBottom:20,padding:"14px 16px",background:"#0d0d18",borderRadius:12,border:"1px solid #1e1e30"}}>
@@ -2133,13 +2185,10 @@ function App(){
                   <div style={{fontSize:10,color:"#7c6fff",fontWeight:600,marginBottom:8,letterSpacing:"0.04em"}}>THIS WEEK</div>
                   <div style={{fontSize:10,color:"#555",marginBottom:6}}>{fmtDate(weekStart)} — {fmtDate(weekEnd)}</div>
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:11,gap:4}}>
-                    <span style={{color:"#555"}}>Balance</span><span style={{color:currentBalance>=0?"#60a5fa":"#f87171"}}>{fmt(currentBalance)}</span>
+                    <span style={{color:"#555"}}>Current Balance</span><span style={{color:currentBalance>=0?"#60a5fa":"#f87171"}}>{fmt(currentBalance)}</span>
                   </div>
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginTop:3,gap:4}}>
-                    <span style={{color:"#555"}}>+ Income</span><span style={{color:"#4ade80"}}>+{fmt(currentIncome)}</span>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginTop:3,gap:4}}>
-                    <span style={{color:"#555"}}>− Bills</span><span style={{color:"#f87171"}}>−{fmt(wbBillTotal)}</span>
+                    <span style={{color:"#555"}}>− Bills{wbBillPaid>0?` (${fmt(wbBillUnpaid)} left)`:""}</span><span style={{color:"#f87171"}}>−{fmt(wbBillUnpaid)}</span>
                   </div>
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginTop:3,gap:4}}>
                     <span style={{color:"#555"}}>− Spent</span><span style={{color:"#f59e0b"}}>−{fmt(wbSpent)}</span>
@@ -2149,7 +2198,7 @@ function App(){
                     <span style={{color:"#aaa"}}>Est. End Balance</span>
                     <span style={{color:projectedBalanceWeek1>=0?"#4ade80":"#f87171"}}>{fmt(projectedBalanceWeek1)}</span>
                   </div>
-                  {thisWeekOver&&<div style={{fontSize:9,color:"#f87171",marginTop:4}}>⚠ bills exceed balance + income</div>}
+                  {thisWeekOver&&<div style={{fontSize:9,color:"#f87171",marginTop:4}}>⚠ balance won't cover remaining bills &amp; spending</div>}
                 </div>
                 {/* Next week column */}
                 <div style={{padding:"12px",background:"#11111c",borderRadius:10,border:`1px solid ${nextWeekOver?"#f59e0b44":nextWeekTight?"#f59e0b22":"#1e1e30"}`}}>
@@ -2192,15 +2241,17 @@ function App(){
                   {weekSchedBills.map((b,i)=>{
                     const acct=acctById(b.account);
                     return(
-                      <div key={b.id+i} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 11px",background:"#11111c",border:"1px solid #1e1e30",borderRadius:9}}>
+                      <div key={b.id+i} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 11px",background:"#11111c",border:`1px solid ${b.paid?"#4ade8022":"#1e1e30"}`,borderRadius:9,opacity:b.paid?0.7:1}}>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12,color:"#ccc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.desc}</div>
+                          <div style={{fontSize:12,color:b.paid?"#555":"#ccc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:b.paid?"line-through":"none"}}>{b.desc}</div>
                           <div style={{display:"flex",alignItems:"center",gap:5,marginTop:2}}>
-                            <span style={{fontSize:10,color:"#555"}}>Due {b.dueDate.slice(5)}</span>
+                            {b.paid
+                              ?<span style={{fontSize:10,color:"#4ade80"}}>✓ paid</span>
+                              :<span style={{fontSize:10,color:"#555"}}>Due {b.dueDate.slice(5)}</span>}
                             <span className="acct-chip" style={{background:`${acct.color}18`,borderColor:`${acct.color}33`,color:acct.color}}>{acct.label}</span>
                           </div>
                         </div>
-                        <div style={{fontSize:12,color:"#f87171",flexShrink:0,fontWeight:500}}>−{fmt(b.amount)}</div>
+                        <div style={{fontSize:12,color:b.paid?"#4ade80":"#f87171",flexShrink:0,fontWeight:500}}>{b.paid?"✓":"-"}{fmt(b.amount)}</div>
                       </div>
                     );
                   })}
