@@ -704,7 +704,8 @@ function App(){
   const [qaModal,setQaModal]=useState(false); // false | "new" | qaObj
 
 
-  // Always save to localStorage
+  // Always save to localStorage immediately (synchronous via useEffect is fine here
+  // since 2s debounce gives plenty of time before syncToSheet reads localStorage)
   useEffect(()=>{save(TX_KEY,transactions);},[transactions]);
   useEffect(()=>{save(QA_KEY,quickAdds);},[quickAdds]);
   useEffect(()=>{save(CAT_KEY,categories);},[categories]);
@@ -712,27 +713,48 @@ function App(){
   useEffect(()=>{save(SCHED_KEY,scheduled);},[scheduled]);
   useEffect(()=>{save(WB_KEY,wb);},[wb]);
 
-  // On load: if sheet URL is configured, ALWAYS pull from sheet first (sheet = source of truth)
-  // Only allow writes after the pull completes
+  // On load: compare local timestamp vs sheet timestamp, load whichever is newer
   useEffect(()=>{
-    if(!sheetUrl){
-      syncReady.current=true;
-      return;
-    }
-    // Always read from sheet on load — don't trust local cache
+    if(!sheetUrl){ syncReady.current=true; return; }
     setSyncStatus("syncing");
-    syncFromSheet(true).then(()=>{
-      // Wait 3s after read so React re-renders and localStorage is written
-      // before any write debounce fires
-      setTimeout(()=>{ syncReady.current=true; }, 3000);
+    // Read sheet to check its timestamp
+    sheetRead(sheetUrl).then(data=>{
+      const sheetTs = data?.savedAt ? new Date(data.savedAt).getTime() : 0;
+      const localTs = parseInt(localStorage.getItem("ledger_saved_at")||"0");
+      if(sheetTs > localTs){
+        // Sheet is newer — apply sheet data
+        if(Array.isArray(data.transactions)){
+          nextId=data.transactions.length?Math.max(...data.transactions.map(t=>Number(t.id)||0),17)+1:18;
+          setTransactions(data.transactions.map(t=>({...t,id:Number(t.id),amount:Number(t.amount)})));
+        }
+        if(Array.isArray(data.scheduled)&&data.scheduled.length){
+          nextSchedId=Math.max(...data.scheduled.map(s=>parseInt(String(s.id).replace("s",""))||0),9)+1;
+          setScheduled(data.scheduled.map(s=>({isIncome:false,...s,amount:Number(s.amount)})));
+        }
+        if(Array.isArray(data.accounts)&&data.accounts.length)
+          setAccounts(data.accounts.map(a=>({...a,startBalance:Number(a.startBalance)})));
+        if(Array.isArray(data.categories)&&data.categories.length)
+          setCategories(data.categories);
+        if(Array.isArray(data.weekly_budget)&&data.weekly_budget.length){
+          const decoded=decodeWb(data.weekly_budget);
+          setWb(decoded);
+        }
+        localStorage.setItem("ledger_saved_at", String(sheetTs));
+        setSyncStatus("ok"); setLastSync(new Date());
+        setTimeout(()=>setSyncStatus("idle"),3000);
+      } else {
+        // Local is newer (or equal) — keep local data, write it to sheet
+        setSyncStatus("idle");
+      }
+      setTimeout(()=>{ syncReady.current=true; }, 2000);
     }).catch(()=>{
-      // If sheet read fails, fall back to local data but allow writes
+      // Can't reach sheet — use local data
       syncReady.current=true;
+      setSyncStatus("error");
     });
   },[]);
 
-  // Debounced sync to Google Sheets — only fires if syncReady AND
-  // we use a fresh read of state inside syncToSheet (not closure values)
+  // Debounced sync to Google Sheets (2s after last change)
   useEffect(()=>{
     if(!sheetUrl||!syncReady.current)return;
     clearTimeout(syncTimer.current);
@@ -742,31 +764,27 @@ function App(){
 
   async function syncToSheet(){
     if(!sheetUrl||!syncReady.current){return;}
-    // Read fresh data from localStorage — always current, never stale from closure
-    const freshTx       = load(TX_KEY,   []);
-    const freshSched    = load(SCHED_KEY, []);
-    const freshAccts    = load(ACCT_KEY,  DEFAULT_ACCOUNTS);
-    const freshCats     = load(CAT_KEY,   DEFAULT_CATEGORIES);
-    const freshWb       = load(WB_KEY,    {income:0,incomeByAccount:{},bills:[],weekTx:[]});
+    // Read fresh from localStorage — always current
+    const freshTx    = load(TX_KEY,   []);
+    const freshSched = load(SCHED_KEY, []);
+    const freshAccts = load(ACCT_KEY,  DEFAULT_ACCOUNTS);
+    const freshCats  = load(CAT_KEY,   DEFAULT_CATEGORIES);
+    const freshWb    = load(WB_KEY,    {income:0,incomeByAccount:{},bills:[],weekTx:[]});
     setSyncStatus("syncing");
     try{
-      await sheetWrite(sheetUrl,{
-        transactions:   freshTx,
-        scheduled:      freshSched,
-        accounts:       freshAccts,
-        categories:     freshCats,
-        weekly_budget:  encodeWb(freshWb),
+      const result=await sheetWrite(sheetUrl,{
+        transactions:  freshTx,
+        scheduled:     freshSched,
+        accounts:      freshAccts,
+        categories:    freshCats,
+        weekly_budget: encodeWb(freshWb),
       });
-      await new Promise(r=>setTimeout(r,1500));
-      const verify=await sheetRead(sheetUrl);
-      const savedCount=verify?.transactions?.length??-1;
-      if(savedCount>=0){
-        setSyncStatus("ok");
-        setLastSync(new Date());
-        setTimeout(()=>setSyncStatus("idle"),3000);
-      } else {
-        setSyncStatus("error");
-      }
+      // Store timestamp so we know local is current on next load
+      const ts=result?.savedAt ? new Date(result.savedAt).getTime() : Date.now();
+      localStorage.setItem("ledger_saved_at", String(ts));
+      setSyncStatus("ok");
+      setLastSync(new Date());
+      setTimeout(()=>setSyncStatus("idle"),3000);
     }catch(err){
       console.error("Sheet sync failed:",err);
       setSyncStatus("error");
@@ -1239,6 +1257,7 @@ function App(){
     if(window.confirm("Reset ALL data?")){
       nextId=18;nextSchedId=10;nextWbId=10;nextWtxId=1;
       localStorage.removeItem("ledger_applied_log");
+      localStorage.removeItem("ledger_saved_at");
       setTransactions(loadTx());setCategories(DEFAULT_CATEGORIES);setAccounts(DEFAULT_ACCOUNTS);
       setScheduled(DEFAULT_SCHEDULED);setWb({income:1433.39,bills:DEFAULT_WEEKLY_BILLS,weekTx:[]});
       showToast("Reset complete");
