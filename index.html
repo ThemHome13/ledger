@@ -189,36 +189,46 @@ function sheetRead(url){
   });
 }
 
-async function sheetWrite(url,payload){
-  // Use JSONP (script tag) for writes too — the only truly reliable cross-origin method
-  // Data is sent as a URL parameter, Apps Script reads from e.parameter.data
+// Write one sheet at a time via JSONP GET, chunking transactions into batches of 50
+async function sheetWriteChunk(url,sheetName,rows,headers,savedAt){
   return new Promise((resolve,reject)=>{
-    const cbName="__ledgerWrite_"+Date.now();
+    const cbName="__ledgerW_"+Date.now();
     const script=document.createElement("script");
-    const timer=setTimeout(()=>{
-      cleanup();
-      // Timeout is ok — write may still have landed, just no confirmation
-      resolve({ok:true,savedAt:new Date().toISOString(),timedOut:true});
-    },15000);
-    function cleanup(){
-      clearTimeout(timer);
-      delete window[cbName];
-      if(script.parentNode) script.parentNode.removeChild(script);
-    }
-    window[cbName]=function(data){
-      cleanup();
-      if(data&&data.error) reject(new Error(String(data.error)));
-      else resolve(data||{ok:true});
-    };
-    script.onerror=()=>{
-      cleanup();
-      // Script errors on write are usually just CORS on the response — the write likely landed
-      resolve({ok:true,savedAt:new Date().toISOString(),opaqueError:true});
-    };
-    const encoded=encodeURIComponent(JSON.stringify({...payload,action:"write"}));
+    const timer=setTimeout(()=>{cleanup();resolve({ok:true,timedOut:true});},20000);
+    function cleanup(){clearTimeout(timer);delete window[cbName];if(script.parentNode)script.parentNode.removeChild(script);}
+    window[cbName]=function(d){cleanup();if(d&&d.error)reject(new Error(String(d.error)));else resolve(d||{ok:true});};
+    script.onerror=()=>{cleanup();resolve({ok:true,opaqueError:true});};
+    const payload={action:"writeSheet",sheetName,rows,headers,savedAt};
+    const encoded=encodeURIComponent(JSON.stringify(payload));
     script.src=`${url}?callback=${cbName}&data=${encoded}&t=${Date.now()}`;
     document.head.appendChild(script);
   });
+}
+
+async function sheetWrite(url,payload){
+  const now=new Date().toISOString();
+  const sheets=[
+    {name:"accounts",      rows:payload.accounts,      headers:["id","label","type","color","icon","startBalance"]},
+    {name:"categories",    rows:payload.categories,    headers:["id","label","color","icon","builtIn"]},
+    {name:"scheduled",     rows:payload.scheduled,     headers:["id","desc","amount","category","account","isIncome","recurrenceType","dayOfMonth","dayOfWeek","active"]},
+    {name:"weekly_budget", rows:payload.weekly_budget, headers:["key","value"]},
+  ];
+  // Write non-transaction sheets first
+  for(const s of sheets){
+    await sheetWriteChunk(url,s.name,s.rows||[],s.headers,null);
+  }
+  // Write transactions in chunks of 40 rows to stay under URL limit
+  const txRows=payload.transactions||[];
+  const CHUNK=40;
+  for(let i=0;i<Math.max(1,Math.ceil(txRows.length/CHUNK));i++){
+    const chunk=txRows.slice(i*CHUNK,(i+1)*CHUNK);
+    const isFirst=i===0;
+    const isLast=(i+1)*CHUNK>=txRows.length||txRows.length===0;
+    await sheetWriteChunk(url,"transactions",chunk,
+      ["id","date","desc","amount","category","account","isTransfer","transferId","transferTo","transferFrom","scheduledId"],
+      isLast?now:null); // only set savedAt on the last chunk
+  }
+  return{ok:true,savedAt:now};
 }
 // Encode weekly_budget as [{key,value}] rows for the sheet
 function encodeWb(wb){return[
@@ -713,16 +723,14 @@ function App(){
   useEffect(()=>{save(SCHED_KEY,scheduled);},[scheduled]);
   useEffect(()=>{save(WB_KEY,wb);},[wb]);
 
-  // On load: compare local timestamp vs sheet timestamp, load whichever is newer
+  // On load: compare timestamps, pull from sheet only if it's newer than local data
   useEffect(()=>{
     if(!sheetUrl){ syncReady.current=true; return; }
     setSyncStatus("syncing");
-    // Read sheet to check its timestamp
     sheetRead(sheetUrl).then(data=>{
-      const sheetTs = data?.savedAt ? new Date(data.savedAt).getTime() : 0;
-      const localTs = parseInt(localStorage.getItem("ledger_saved_at")||"0");
-      if(sheetTs > localTs){
-        // Sheet is newer — apply sheet data
+      const sheetTs=data?.savedAt?new Date(data.savedAt).getTime():0;
+      const localTs=parseInt(localStorage.getItem("ledger_saved_at")||"0");
+      if(sheetTs>localTs){
         if(Array.isArray(data.transactions)){
           nextId=data.transactions.length?Math.max(...data.transactions.map(t=>Number(t.id)||0),17)+1:18;
           setTransactions(data.transactions.map(t=>({...t,id:Number(t.id),amount:Number(t.amount)})));
@@ -735,32 +743,19 @@ function App(){
           setAccounts(data.accounts.map(a=>({...a,startBalance:Number(a.startBalance)})));
         if(Array.isArray(data.categories)&&data.categories.length)
           setCategories(data.categories);
-        if(Array.isArray(data.weekly_budget)&&data.weekly_budget.length){
-          const decoded=decodeWb(data.weekly_budget);
-          setWb(decoded);
-        }
-        localStorage.setItem("ledger_saved_at", String(sheetTs));
+        if(Array.isArray(data.weekly_budget)&&data.weekly_budget.length)
+          setWb(decodeWb(data.weekly_budget));
+        localStorage.setItem("ledger_saved_at",String(sheetTs));
         setSyncStatus("ok"); setLastSync(new Date());
+        showToast("Loaded latest from Sheets ✓");
         setTimeout(()=>setSyncStatus("idle"),3000);
       } else {
-        // Local is newer (or equal) — keep local data, write it to sheet
         setSyncStatus("idle");
       }
-      setTimeout(()=>{ syncReady.current=true; }, 2000);
-    }).catch(()=>{
-      // Can't reach sheet — use local data
       syncReady.current=true;
-      setSyncStatus("error");
-    });
+    }).catch(()=>{ syncReady.current=true; setSyncStatus("error"); });
   },[]);
-
-  // Debounced sync to Google Sheets (2s after last change)
-  useEffect(()=>{
-    if(!sheetUrl||!syncReady.current)return;
-    clearTimeout(syncTimer.current);
-    syncTimer.current=setTimeout(()=>syncToSheet(),2000);
-    return()=>clearTimeout(syncTimer.current);
-  },[transactions,categories,accounts,scheduled,wb,sheetUrl]);
+  // NOTE: No auto-write debounce — use the ☁️ Push button to save to Sheets
 
   async function syncToSheet(){
     if(!sheetUrl||!syncReady.current){return;}
@@ -1271,9 +1266,10 @@ function App(){
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
-        const text=ev.target.result;
+        // Strip BOM (Excel adds \uFEFF), normalize line endings
+        const text=ev.target.result.replace(/^\uFEFF/,"");
         const lines=text.split(/\r?\n/).filter(l=>l.trim());
-        if(lines.length<2){showToast("CSV appears empty",false);return;}
+        if(lines.length<2){showToast("CSV appears empty — add at least one data row",false);return;}
 
         // Parse a CSV row handling quoted fields
         function parseRow(line){
@@ -1290,7 +1286,8 @@ function App(){
           return fields;
         }
 
-        const header=parseRow(lines[0]).map(h=>h.toLowerCase().replace(/"/g,"").trim());
+        // Strip quotes, lowercase, remove non-alphanumeric chars for robust matching
+        const header=parseRow(lines[0]).map(h=>h.toLowerCase().replace(/"/g,"").replace(/[^a-z0-9\s]/g,"").trim());
         const col=(...names)=>{
           for(const name of names){
             const i=header.findIndex(h=>h===name||h.includes(name));
@@ -1307,7 +1304,11 @@ function App(){
         const xferCol  = col("transfer");
 
         if(dateCol<0||descCol<0||amtCol<0){
-          showToast("Need at least Date, Description, Amount columns",false);
+          const missing=[];
+          if(dateCol<0) missing.push("Date");
+          if(descCol<0) missing.push("Description");
+          if(amtCol<0)  missing.push("Amount");
+          showToast(`Missing columns: ${missing.join(", ")}. Found: ${header.join(", ")}`,false);
           e.target.value="";return;
         }
 
@@ -1467,10 +1468,18 @@ function App(){
           {/* Desktop action buttons */}
           <div className="hide-mobile" style={{display:"flex",gap:6}}>
             {sheetUrl&&(
-              <button onClick={syncFromSheet} title={lastSync?"Last sync: "+lastSync.toLocaleTimeString():"Not synced yet"}
-                style={{background:syncStatus==="ok"?"#4ade8018":syncStatus==="error"?"#f8717118":syncStatus==="syncing"?"#7c6fff18":"#1a1a28",border:`1px solid ${syncStatus==="ok"?"#4ade8044":syncStatus==="error"?"#f8717144":syncStatus==="syncing"?"#7c6fff44":"#2a2a40"}`,color:syncStatus==="ok"?"#4ade80":syncStatus==="error"?"#f87171":syncStatus==="syncing"?"#7c6fff":"#888",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono",transition:"all .3s"}}>
-                {syncStatus==="syncing"?"⟳":"✓"}
-              </button>
+              <>
+                <button onClick={()=>syncToSheet()} disabled={syncStatus==="syncing"}
+                  title="Save your data to Google Sheets"
+                  style={{background:"#7c6fff18",border:"1px solid #7c6fff44",color:syncStatus==="syncing"?"#7c6fff":"#a78bfa",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono",transition:"all .3s"}}>
+                  {syncStatus==="syncing"?"⟳ saving…":"☁↑ Push"}
+                </button>
+                <button onClick={()=>syncFromSheet()}
+                  title="Load latest data from Google Sheets"
+                  style={{background:syncStatus==="ok"?"#4ade8018":syncStatus==="error"?"#f8717118":"#1a1a28",border:`1px solid ${syncStatus==="ok"?"#4ade8044":syncStatus==="error"?"#f8717144":"#2a2a40"}`,color:syncStatus==="ok"?"#4ade80":syncStatus==="error"?"#f87171":"#888",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono",transition:"all .3s"}}>
+                  {syncStatus==="ok"?"✓ synced":syncStatus==="error"?"✗ error":"☁↓ Pull"}
+                </button>
+              </>
             )}
             <button onClick={()=>{setSheetUrlInput(sheetUrl);setSettingsOpen(true);}} style={{background:sheetUrl?"#7c6fff18":"#1a1a28",border:sheetUrl?"1px solid #7c6fff44":"1px solid #2a2a40",color:sheetUrl?"#a78bfa":"#888",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono"}} title="Google Sheets settings">
               {sheetUrl?"🔗 Sheets":"☁️ Sheets"}
@@ -1508,7 +1517,8 @@ function App(){
             {sheetUrl&&syncStatus==="ok"&&<span style={{marginLeft:"auto",fontSize:10,color:"#4ade80"}}>✓</span>}
             {sheetUrl&&syncStatus==="error"&&<span style={{marginLeft:"auto",fontSize:10,color:"#f87171"}}>✗</span>}
           </button>
-          {sheetUrl&&<button className="toolbar-btn" onClick={()=>{syncFromSheet();setMenuOpen(false);}}><span style={{color:"#7c6fff"}}>⟳</span> Pull latest from Sheets</button>}
+          {sheetUrl&&<button className="toolbar-btn" onClick={()=>{syncToSheet();setMenuOpen(false);}}><span style={{color:"#a78bfa"}}>☁↑</span> Push to Sheets</button>}
+          {sheetUrl&&<button className="toolbar-btn" onClick={()=>{syncFromSheet();setMenuOpen(false);}}><span style={{color:"#7c6fff"}}>☁↓</span> Pull from Sheets</button>}
         </div>
       )}
       {menuOpen&&<div style={{position:"fixed",inset:0,zIndex:98}} onClick={()=>setMenuOpen(false)}/>}
