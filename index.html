@@ -157,77 +157,94 @@ function loadSheetUrl(){return localStorage.getItem(SHEET_KEY)||"";}
 function saveSheetUrl(url){localStorage.setItem(SHEET_KEY,url);}
 
 /* ── Google Sheets sync ──────────────────────────────────────────────────── */
-// READ  → fetch with no-cors then text parse (script is public, CORS allowed)
-// WRITE → no-cors POST with URL-encoded form body (e.parameter.payload)
+// All requests use JSONP (script tag injection) to avoid CORS restrictions.
+// Writes are chunked into small batches to stay under the ~2000 char URL limit
+// (after encoding, each transaction row is ~200-400 chars).
+// Reads use a page parameter to retrieve transactions in batches.
 
-function sheetRead(url){
+function jsonpCall(url,params){
   return new Promise((resolve,reject)=>{
-    const cbName="__ledgerCb_"+Date.now();
+    const cbName="__lCb_"+Date.now()+"_"+Math.random().toString(36).slice(2);
     const script=document.createElement("script");
     const timer=setTimeout(()=>{
       cleanup();
-      reject(new Error("Timeout — script loaded but callback never fired (response may be too large)"));
-    },20000);
+      reject(new Error("Request timed out"));
+    },25000);
     function cleanup(){
       clearTimeout(timer);
       delete window[cbName];
       if(script.parentNode) script.parentNode.removeChild(script);
     }
-    window[cbName]=function(data){
+    window[cbName]=function(d){
       cleanup();
-      if(!data) reject(new Error("Callback received null/undefined"));
-      else if(typeof data==="string") reject(new Error("Got string instead of object: "+data.slice(0,100)));
-      else if(data.error) reject(new Error("Script error: "+String(data.error)));
-      else resolve(data);
+      if(d&&d.error) reject(new Error(String(d.error)));
+      else resolve(d||{ok:true});
     };
-    script.onerror=()=>{
-      cleanup();
-      reject(new Error("Script tag failed to load"));
-    };
-    script.src=`${url}?action=read&callback=${cbName}&t=${Date.now()}`;
+    script.onerror=()=>{ cleanup(); reject(new Error("Request failed to load")); };
+    const qs=Object.entries({...params,callback:cbName,t:Date.now()})
+      .map(([k,v])=>k+"="+encodeURIComponent(v)).join("&");
+    script.src=url+"?"+qs;
     document.head.appendChild(script);
   });
 }
 
-// Write one sheet at a time via JSONP GET, chunking transactions into batches of 50
-async function sheetWriteChunk(url,sheetName,rows,headers,savedAt){
-  return new Promise((resolve,reject)=>{
-    const cbName="__ledgerW_"+Date.now();
-    const script=document.createElement("script");
-    const timer=setTimeout(()=>{cleanup();resolve({ok:true,timedOut:true});},20000);
-    function cleanup(){clearTimeout(timer);delete window[cbName];if(script.parentNode)script.parentNode.removeChild(script);}
-    window[cbName]=function(d){cleanup();if(d&&d.error)reject(new Error(String(d.error)));else resolve(d||{ok:true});};
-    script.onerror=()=>{cleanup();resolve({ok:true,opaqueError:true});};
-    const payload={action:"writeSheet",sheetName,rows,headers,savedAt};
-    const encoded=encodeURIComponent(JSON.stringify(payload));
-    script.src=`${url}?callback=${cbName}&data=${encoded}&t=${Date.now()}`;
-    document.head.appendChild(script);
-  });
+// Read all data — transactions are fetched page by page
+async function sheetRead(url){
+  // Read metadata + non-transaction sheets first
+  const base=await jsonpCall(url,{action:"read"});
+  if(!base.ok) throw new Error(base.error||"Read failed");
+
+  // Fetch all transaction pages
+  let allTx=base.transactions||[];
+  const totalTx=base.totalTransactions||allTx.length;
+  const pageSize=base.pageSize||totalTx;
+
+  if(totalTx>allTx.length){
+    let page=2;
+    while(allTx.length<totalTx){
+      const pageData=await jsonpCall(url,{action:"readTx",page:String(page)});
+      if(!pageData.transactions||pageData.transactions.length===0) break;
+      allTx=[...allTx,...pageData.transactions];
+      page++;
+    }
+  }
+
+  return{...base,transactions:allTx};
 }
+
+// Write — sends each sheet separately, transactions in batches of 8 rows
+const TX_HEADERS=["id","date","desc","amount","category","account","isTransfer","transferId","transferTo","transferFrom","scheduledId"];
+const SCHED_HEADERS=["id","desc","amount","category","account","isIncome","recurrenceType","dayOfMonth","dayOfWeek","active"];
+const ACCT_HEADERS=["id","label","type","color","icon","startBalance"];
+const CAT_HEADERS=["id","label","color","icon","builtIn"];
+const WB_HEADERS=["key","value"];
+const TX_CHUNK=8; // keep well under URL limit
 
 async function sheetWrite(url,payload){
   const now=new Date().toISOString();
-  const sheets=[
-    {name:"accounts",      rows:payload.accounts,      headers:["id","label","type","color","icon","startBalance"]},
-    {name:"categories",    rows:payload.categories,    headers:["id","label","color","icon","builtIn"]},
-    {name:"scheduled",     rows:payload.scheduled,     headers:["id","desc","amount","category","account","isIncome","recurrenceType","dayOfMonth","dayOfWeek","active"]},
-    {name:"weekly_budget", rows:payload.weekly_budget, headers:["key","value"]},
-  ];
-  // Write non-transaction sheets first
-  for(const s of sheets){
-    await sheetWriteChunk(url,s.name,s.rows||[],s.headers,null);
-  }
-  // Write transactions in chunks of 40 rows to stay under URL limit
+
+  // Write small sheets (no chunking needed)
+  await jsonpCall(url,{action:"writeSheet",sheet:"accounts",      data:JSON.stringify(payload.accounts||[]),      headers:JSON.stringify(ACCT_HEADERS), clear:"1"});
+  await jsonpCall(url,{action:"writeSheet",sheet:"categories",    data:JSON.stringify(payload.categories||[]),    headers:JSON.stringify(CAT_HEADERS),  clear:"1"});
+  await jsonpCall(url,{action:"writeSheet",sheet:"scheduled",     data:JSON.stringify(payload.scheduled||[]),     headers:JSON.stringify(SCHED_HEADERS),clear:"1"});
+  await jsonpCall(url,{action:"writeSheet",sheet:"weekly_budget", data:JSON.stringify(payload.weekly_budget||[]), headers:JSON.stringify(WB_HEADERS),   clear:"1"});
+
+  // Write transactions in small chunks
   const txRows=payload.transactions||[];
-  const CHUNK=40;
-  for(let i=0;i<Math.max(1,Math.ceil(txRows.length/CHUNK));i++){
-    const chunk=txRows.slice(i*CHUNK,(i+1)*CHUNK);
-    const isFirst=i===0;
-    const isLast=(i+1)*CHUNK>=txRows.length||txRows.length===0;
-    await sheetWriteChunk(url,"transactions",chunk,
-      ["id","date","desc","amount","category","account","isTransfer","transferId","transferTo","transferFrom","scheduledId"],
-      isLast?now:null); // only set savedAt on the last chunk
+  const totalChunks=Math.max(1,Math.ceil(txRows.length/TX_CHUNK));
+  for(let i=0;i<totalChunks;i++){
+    const chunk=txRows.slice(i*TX_CHUNK,(i+1)*TX_CHUNK);
+    const isLast=i===totalChunks-1;
+    await jsonpCall(url,{
+      action:"writeSheet",
+      sheet:"transactions",
+      data:JSON.stringify(chunk),
+      headers:JSON.stringify(TX_HEADERS),
+      clear:i===0?"1":"0",  // only clear on first chunk
+      savedAt:isLast?now:"", // only stamp timestamp on last chunk
+    });
   }
+
   return{ok:true,savedAt:now};
 }
 // Encode weekly_budget as [{key,value}] rows for the sheet
