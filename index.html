@@ -1,0 +1,2246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>$LEDGER</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0a0a0f;color:#e8e6f0;font-family:'DM Mono','Courier New',monospace;-webkit-text-size-adjust:100%;}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#111}::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+input,select,button{outline:none;-webkit-tap-highlight-color:transparent;}
+input,select{font-size:16px!important;} /* prevent iOS zoom on focus */
+
+/* ── Core components ── */
+.card{background:#11111c;border:1px solid #1e1e30;border-radius:16px;padding:18px;}
+.btn-primary{background:#7c6fff;color:#fff;border:none;border-radius:10px;padding:13px 22px;font-family:'DM Mono',monospace;font-size:14px;cursor:pointer;transition:all .2s;font-weight:500;touch-action:manipulation;}
+.btn-primary:active{background:#9585ff;transform:scale(0.97);}
+.btn-sm{background:#1a1a28;border:1px solid #2a2a40;color:#888;border-radius:7px;padding:6px 12px;cursor:pointer;font-size:11px;font-family:'DM Mono',monospace;transition:all .15s;touch-action:manipulation;}
+.btn-sm:active{color:#e8e6f0;border-color:#555;}
+.input-field{background:#1a1a28;border:1px solid #2a2a40;color:#e8e6f0;border-radius:10px;padding:12px 14px;font-family:'DM Mono',monospace;font-size:16px;width:100%;transition:border-color .2s;}
+.input-field:focus{border-color:#7c6fff;}
+.row-hover:active{background:#16162a!important;}
+.acct-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:10px;border:1px solid transparent;}
+.lbl{font-size:11px;color:#555;letter-spacing:.08em;display:block;margin-bottom:6px;text-transform:uppercase;}
+.color-swatch{width:28px;height:28px;border-radius:7px;border:2px solid transparent;cursor:pointer;transition:transform .1s;}
+.color-swatch.selected{border-color:#fff;box-shadow:0 0 0 1px #fff4;}
+.icon-btn{width:36px;height:36px;border-radius:8px;background:#1a1a28;border:1px solid #2a2a40;color:#aaa;cursor:pointer;font-size:16px;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;touch-action:manipulation;}
+.icon-btn.selected{border-color:#7c6fff;background:#7c6fff22;}
+.seg-btn{background:none;border:1px solid transparent;cursor:pointer;padding:7px 11px;border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:#555;transition:all .15s;white-space:nowrap;touch-action:manipulation;}
+.seg-btn.active{background:#1e1e30;color:#e8e6f0;border-color:#2a2a40;}
+
+/* ── Scheduled + Budget ── */
+.sched-row{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;background:#11111c;border:1px solid #1e1e30;}
+.budget-box{background:#11111c;border-radius:14px;padding:16px 18px;position:relative;overflow:hidden;}
+.budget-box .accent{position:absolute;top:0;left:0;right:0;height:3px;}
+.week-tx-row{display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:9px;background:#0f0f1a;border:1px solid #1a1a28;margin-bottom:4px;}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1e1e30;border:1px solid #2a2a40;padding:12px 22px;border-radius:12px;font-size:13px;z-index:300;animation:fadeUp .3s ease;box-shadow:0 8px 32px #0008;white-space:nowrap;}
+@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* ── Modal ── */
+.modal-bg{position:fixed;inset:0;background:#0009;z-index:200;display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .15s ease;padding:0;}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{background:#11111c;border:1px solid #2a2a40;border-radius:20px 20px 0 0;padding:24px 20px;padding-bottom:calc(24px + env(safe-area-inset-bottom));width:100%;max-width:100%;animation:slideUp .25s ease;max-height:92vh;overflow-y:auto;}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── TOP header bar ── */
+.top-bar{position:sticky;top:0;z-index:50;background:#0a0a0f;border-bottom:1px solid #1e1e30;padding:0 16px;height:52px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+
+/* ── Bottom tab nav (mobile) ── */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:100;background:#0d0d18;border-top:1px solid #1e1e30;display:flex;padding-bottom:env(safe-area-inset-bottom);}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 2px;gap:3px;background:none;border:none;cursor:pointer;color:#555;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.03em;touch-action:manipulation;min-height:56px;}
+.tab-btn.active{color:#7c6fff;}
+.tab-btn .tab-icon{font-size:18px;line-height:1;}
+
+/* ── Page content padding (leaves room for bottom nav) ── */
+.page-content{padding:16px 14px 100px 14px;max-width:980px;margin:0 auto;}
+
+/* ── Action toolbar (hidden on mobile, shown in ⋯ menu) ── */
+.toolbar-btn{background:#1a1a28;border:1px solid #2a2a40;color:#888;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:12px;font-family:'DM Mono',monospace;touch-action:manipulation;display:flex;align-items:center;gap:6px;width:100%;}
+.toolbar-btn:active{color:#e8e6f0;}
+
+/* ── Responsive grids ── */
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+.grid-budget{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.grid-weekly{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+
+@media(max-width:600px){
+  .grid-3{grid-template-columns:1fr;}
+  .grid-2{grid-template-columns:repeat(2,1fr);}
+  .grid-budget{grid-template-columns:repeat(2,1fr);}
+  .grid-weekly{grid-template-columns:1fr;}
+  .modal{border-radius:20px 20px 0 0;max-width:100%;}
+  .hide-mobile{display:none!important;}
+  .page-content{padding:14px 12px 90px 12px;}
+}
+@media(min-width:601px){
+  .bottom-nav{display:none;}
+  .desktop-nav{display:flex!important;}
+  .hide-desktop{display:none!important;}
+  .top-bar{height:56px;}
+  .page-content{padding:24px 20px 40px 20px;}
+  .modal{border-radius:20px;max-width:480px;align-self:center;margin:auto;}
+  .modal-bg{align-items:center;}
+  .toast{bottom:28px;}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+
+/* ── Constants ──────────────────────────────────────────────────────────── */
+const DEFAULT_QUICKADD=[
+  {id:"qa1",desc:"Paycheck",     amount:"1433.39",cat:"income",   type:"income", acct:"chk1"},
+  {id:"qa2",desc:"Cornerstone",  amount:"1491.00",cat:"housing",  type:"expense",acct:"chk1"},
+  {id:"qa3",desc:"Rent",         amount:"800.00", cat:"housing",  type:"expense",acct:"chk1"},
+  {id:"qa4",desc:"AT&T",         amount:"70.47",  cat:"utilities",type:"expense",acct:"chk1"},
+  {id:"qa5",desc:"Civic Payment",amount:"522.35", cat:"transport",type:"expense",acct:"chk2"},
+  {id:"qa6",desc:"Jeep Payment", amount:"581.00", cat:"transport",type:"expense",acct:"chk2"},
+];
+const DEFAULT_ACCOUNTS=[
+  {id:"chk1",label:"Checking 1",type:"checking",color:"#60a5fa",icon:"🏦",startBalance:0},
+  {id:"chk2",label:"Checking 2",type:"checking",color:"#c084fc",icon:"🏦",startBalance:0},
+  {id:"sav1",label:"Savings",   type:"savings", color:"#34d399",icon:"💰",startBalance:0},
+];
+const DEFAULT_CATEGORIES=[
+  {id:"income",      label:"Income",          color:"#4ade80",icon:"↑", builtIn:true},
+  {id:"housing",     label:"Housing",         color:"#fb923c",icon:"⌂", builtIn:true},
+  {id:"utilities",   label:"Utilities",       color:"#60a5fa",icon:"⚡",builtIn:true},
+  {id:"transport",   label:"Transport",       color:"#c084fc",icon:"🚗",builtIn:true},
+  {id:"food",        label:"Food",            color:"#f472b6",icon:"🍽",builtIn:true},
+  {id:"savings",     label:"Savings/Transfer",color:"#34d399",icon:"🏦",builtIn:true},
+  {id:"subscription",label:"Subscriptions",   color:"#facc15",icon:"♾", builtIn:true},
+  {id:"childcare",   label:"Child Care",      color:"#38bdf8",icon:"🧒",builtIn:true},
+  {id:"loans",       label:"Loans/Credit",    color:"#f87171",icon:"💳",builtIn:true},
+  {id:"misc",        label:"Misc",            color:"#94a3b8",icon:"•", builtIn:true},
+];
+const DEFAULT_SCHEDULED=[
+  {id:"s1",desc:"Cornerstone (CS)",amount:1491.00,category:"housing",   account:"chk1",dayOfMonth:1, active:true},
+  {id:"s2",desc:"AT&T",           amount:70.47,  category:"utilities",  account:"chk1",dayOfMonth:9, active:true},
+  {id:"s3",desc:"Civic Payment",  amount:522.35, category:"transport",  account:"chk2",dayOfMonth:15,active:true},
+  {id:"s4",desc:"Jeep Payment",   amount:581.00, category:"transport",  account:"chk2",dayOfMonth:28,active:true},
+  {id:"s5",desc:"Verizon",        amount:237.65, category:"utilities",  account:"chk1",dayOfMonth:21,active:true},
+  {id:"s6",desc:"Rent",           amount:800.00, category:"housing",    account:"chk1",dayOfMonth:6, active:true},
+];
+const DEFAULT_WEEKLY_BILLS=[
+  {id:"wb1",desc:"Rent (weekly share)",amount:200.00},
+  {id:"wb2",desc:"Utilities",          amount:60.00},
+];
+const PALETTE=["#f87171","#fb923c","#fbbf24","#facc15","#a3e635","#4ade80","#34d399","#2dd4bf","#38bdf8","#60a5fa","#818cf8","#a78bfa","#c084fc","#e879f9","#f472b6","#fb7185","#94a3b8","#e8e6f0"];
+const ICONS=["🏠","🚗","🍽","⚡","🏦","💊","🎮","🎓","✈️","🐾","👕","💄","🎁","📱","💻","🏋️","🌿","🍺","☕","🛒","🔧","📦","💰","🎵","📚","•","⌂","↑","♾","⚙️","🌟","❤️","🎯","🧴","🧹","🏖️","🎪","🚀","🌈","🍕"];
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAYS=Array.from({length:31},(_,i)=>i+1);
+
+/* ── Storage keys ───────────────────────────────────────────────────────── */
+const TX_KEY    ="ledger_tx_v5";
+const CAT_KEY   ="ledger_cat_v5";
+const ACCT_KEY  ="ledger_acct_v5";
+const SCHED_KEY ="ledger_sched_v5";
+const WB_KEY    ="ledger_wb_v5";
+const SHEET_KEY ="ledger_sheet_url"; // user pastes their Apps Script URL here
+const QA_KEY    ="ledger_quickadd_v1";
+let nextId=18; let nextSchedId=10; let nextWbId=10; let nextWtxId=1; let nextAcctId=10;
+
+function load(key,def){try{const s=localStorage.getItem(key);if(s)return JSON.parse(s);}catch(e){}return def;}
+function save(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
+function loadSheetUrl(){return localStorage.getItem(SHEET_KEY)||"";}
+function saveSheetUrl(url){localStorage.setItem(SHEET_KEY,url);}
+
+/* ── Google Sheets sync ──────────────────────────────────────────────────── */
+// READ  → fetch with no-cors then text parse (script is public, CORS allowed)
+// WRITE → no-cors POST with URL-encoded form body (e.parameter.payload)
+
+function sheetRead(url){
+  // Try direct fetch first (works when hosted on HTTPS)
+  // Fall back to JSONP (works for local files if CSP allows script.google.com)
+  return new Promise(async(resolve,reject)=>{
+    try{
+      const res=await fetch(`${url}?action=read&t=${Date.now()}`,{cache:"no-store"});
+      const text=await res.text();
+      if(text.trim().startsWith("{")||text.trim().startsWith("[")){
+        const data=JSON.parse(text);
+        if(data.error) reject(new Error(data.error));
+        else resolve(data);
+        return;
+      }
+      // Got HTML back (redirect) — fall through to JSONP
+    }catch(e){
+      // fetch failed — fall through to JSONP
+    }
+
+    // JSONP fallback
+    const cbName="__ledgerCb_"+Date.now();
+    const script=document.createElement("script");
+    const timer=setTimeout(()=>{
+      cleanup();
+      reject(new Error("Sync timed out. Try hosting the app on Netlify (free) instead of opening as a local file — local files have security restrictions that block Google Sheets sync."));
+    },20000);
+    function cleanup(){
+      clearTimeout(timer);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName]=function(data){
+      cleanup();
+      if(data&&data.error) reject(new Error(data.error));
+      else resolve(data);
+    };
+    script.onerror=()=>{
+      cleanup();
+      reject(new Error("Sync blocked. Host the app on Netlify to enable Google Sheets sync — go to netlify.com, drag and drop ledger.html, and use that URL instead."));
+    };
+    script.src=`${url}?action=read&callback=${cbName}&t=${Date.now()}`;
+    document.head.appendChild(script);
+  });
+}
+
+async function sheetWrite(url,payload){
+  const body=new URLSearchParams();
+  body.append("payload",JSON.stringify({...payload,action:"write"}));
+  try{
+    await fetch(url,{
+      method:"POST",
+      mode:"no-cors",
+      body:body,
+    });
+    return{ok:true,savedAt:new Date().toISOString()};
+  }catch(err){
+    throw new Error("Write failed: "+err.message);
+  }
+}
+// Encode weekly_budget as [{key,value}] rows for the sheet
+function encodeWb(wb){return[
+  {key:"income",value:wb.income},
+  {key:"incomeByAccount",value:JSON.stringify(wb.incomeByAccount||{})},
+  {key:"bills",value:JSON.stringify(wb.bills)},
+  {key:"weekTx",value:JSON.stringify(wb.weekTx)},
+];}
+function decodeWb(rows){
+  const m=Object.fromEntries((rows||[]).map(r=>[r.key,r.value]));
+  return{
+    income:parseFloat(m.income)||0,
+    incomeByAccount:m.incomeByAccount?JSON.parse(m.incomeByAccount):{},
+    bills:m.bills?JSON.parse(m.bills):[],
+    weekTx:m.weekTx?JSON.parse(m.weekTx):[],
+  };
+}
+
+function loadTx(){
+  const p=load(TX_KEY,null);
+  if(p){nextId=Math.max(...p.map(t=>t.id),17)+1;return p;}
+  return[
+    {id:1, date:"2025-01-02",desc:"3CI Paycheck",   amount: 1433.39,category:"income",   account:"chk1"},
+    {id:2, date:"2025-01-02",desc:"Emergency Fund", amount: -300.00,category:"savings",  account:"chk1"},
+    {id:3, date:"2025-01-02",desc:"Cornerstone (CS)",amount:-1491.00,category:"housing",  account:"chk1"},
+    {id:4, date:"2025-01-06",desc:"Rent",           amount: -800.00,category:"housing",  account:"chk1"},
+    {id:5, date:"2025-01-09",desc:"AT&T",           amount:  -70.47,category:"utilities",account:"chk1"},
+    {id:6, date:"2025-01-15",desc:"Civic Payment",  amount: -522.35,category:"transport",account:"chk2"},
+    {id:7, date:"2025-01-21",desc:"Verizon",        amount: -237.65,category:"utilities",account:"chk1"},
+    {id:8, date:"2025-01-20",desc:"Electric (AEP)", amount: -124.96,category:"utilities",account:"chk1"},
+    {id:9, date:"2025-01-26",desc:"Gas",            amount: -149.13,category:"utilities",account:"chk2"},
+    {id:10,date:"2025-01-28",desc:"Jeep Payment",   amount: -581.00,category:"transport",account:"chk2"},
+    {id:11,date:"2025-01-30",desc:"Kemba",          amount: -175.00,category:"savings",  account:"sav1"},
+    {id:12,date:"2025-02-06",desc:"3CI Paycheck",   amount: 1433.39,category:"income",   account:"chk1"},
+    {id:13,date:"2025-02-06",desc:"Rent",           amount: -800.00,category:"housing",  account:"chk1"},
+    {id:14,date:"2025-02-08",desc:"AT&T",           amount:  -70.47,category:"utilities",account:"chk1"},
+    {id:15,date:"2025-02-18",desc:"Tax Return",     amount: 1771.00,category:"income",   account:"chk1"},
+    {id:16,date:"2025-02-18",desc:"Civic Payment",  amount: -522.35,category:"transport",account:"chk2"},
+    {id:17,date:"2025-02-18",desc:"Verizon",        amount: -222.89,category:"utilities",account:"chk1"},
+  ];
+}
+function loadSched(){
+  const p=load(SCHED_KEY,null);
+  if(p){nextSchedId=Math.max(...p.map(s=>parseInt(s.id.replace("s",""))||0),9)+1;return p;}
+  return DEFAULT_SCHEDULED;
+}
+function loadWB(){
+  const p=load(WB_KEY,null);
+  if(p){
+    if(p.bills)nextWbId=Math.max(...p.bills.map(b=>parseInt(b.id.replace("wb",""))||0),9)+1;
+    if(p.weekTx)nextWtxId=Math.max(...p.weekTx.map(t=>parseInt(t.id.replace("wt",""))||0),0)+1;
+    return p;
+  }
+  return{income:1433.39,incomeByAccount:{},bills:DEFAULT_WEEKLY_BILLS,weekTx:[]};
+}
+
+function fmt(n){
+  const abs=Math.abs(n),s=abs.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+  return n<0?`−$${s}`:`$${s}`;
+}
+function today(){return new Date().toISOString().slice(0,10);}
+function ordinal(n){const s=["th","st","nd","rd"],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);}
+
+/* ── Modals ─────────────────────────────────────────────────────────────── */
+function CategoryModal({onClose,onSave,editing}){
+  const [label,setLabel]=useState(editing?editing.label:"");
+  const [color,setColor]=useState(editing?editing.color:PALETTE[5]);
+  const [icon,setIcon]=useState(editing?editing.icon:"•");
+  const save=()=>{if(!label.trim())return;onSave({label:label.trim(),color,icon});};
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:800,marginBottom:20}}>{editing?"Edit Category":"New Category"}</div>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,padding:"12px 14px",background:"#1a1a28",borderRadius:12,border:`1px solid ${color}55`}}>
+          <div style={{width:36,height:36,borderRadius:10,background:`${color}22`,border:`1px solid ${color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{icon}</div>
+          <div><div style={{color,fontSize:13,fontWeight:500}}>{label||"Category Name"}</div><div style={{color:"#555",fontSize:11,marginTop:2}}>Preview</div></div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div><label className="lbl">Name</label><input className="input-field" placeholder="e.g. Healthcare…" value={label} onChange={e=>setLabel(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} autoFocus/></div>
+          <div><label className="lbl">Color</label><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{PALETTE.map(c=><div key={c} className={`color-swatch ${color===c?"selected":""}`} style={{background:c}} onClick={()=>setColor(c)}/>)}</div></div>
+          <div><label className="lbl">Icon</label><div style={{display:"flex",flexWrap:"wrap",gap:5}}>{ICONS.map(ic=><button key={ic} className={`icon-btn ${icon===ic?"selected":""}`} onClick={()=>setIcon(ic)}>{ic}</button>)}</div></div>
+          <div style={{display:"flex",gap:10,marginTop:4}}>
+            <button className="btn-primary" style={{flex:1}} onClick={save}>{editing?"Save":"Create Category"}</button>
+            <button onClick={onClose} style={{background:"#1e1e30",border:"1px solid #2a2a40",color:"#888",borderRadius:10,padding:"11px 18px",cursor:"pointer",fontFamily:"DM Mono",fontSize:13}}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ACCT_ICONS=["🏦","💰","💳","🏧","💵","📈","🪙","🏪","🎯","💼","🏠","🚗"];
+const ACCT_TYPES=["checking","savings","credit","cash","investment","other"];
+function AccountModal({onClose,onSave,onDelete,account}){
+  const isNew=!account.id;
+  const [label,setLabel]=useState(account.label||"");
+  const [color,setColor]=useState(account.color||PALETTE[9]);
+  const [balance,setBalance]=useState(String(account.startBalance??0));
+  const [type,setType]=useState(account.type||"checking");
+  const [icon,setIcon]=useState(account.icon||"🏦");
+  const save=()=>{const b=parseFloat(balance);if(!label.trim()||isNaN(b))return;onSave({label:label.trim(),color,startBalance:b,type,icon});};
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{maxWidth:400}}>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:800,marginBottom:20}}>{isNew?"New Account":"Edit Account"}</div>
+        <div style={{padding:"12px 14px",background:`${color}12`,border:`1px solid ${color}33`,borderRadius:12,marginBottom:18,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{fontSize:24}}>{icon}</div>
+          <div><div style={{fontSize:14,color,fontWeight:600}}>{label||"Account Name"}</div><div style={{fontSize:11,color:"#555",marginTop:2}}>{type} · ${parseFloat(balance||0).toFixed(2)} starting</div></div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div><label className="lbl">Name</label><input className="input-field" placeholder="e.g. Chase Checking…" value={label} onChange={e=>setLabel(e.target.value)} autoFocus/></div>
+          <div>
+            <label className="lbl">Type</label>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {ACCT_TYPES.map(t=>(
+                <button key={t} onClick={()=>setType(t)}
+                  style={{background:type===t?`${color}22`:"#1a1a28",border:`1px solid ${type===t?color+"66":"#2a2a40"}`,color:type===t?color:"#666",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontFamily:"DM Mono",fontSize:11,textTransform:"capitalize",transition:"all .15s"}}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div><label className="lbl">Starting Balance</label><input className="input-field" type="number" step="0.01" placeholder="0.00" value={balance} onChange={e=>setBalance(e.target.value)}/></div>
+          <div><label className="lbl">Icon</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{ACCT_ICONS.map(ic=><button key={ic} className={`icon-btn ${icon===ic?"selected":""}`} onClick={()=>setIcon(ic)}>{ic}</button>)}</div></div>
+          <div><label className="lbl">Color</label><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{PALETTE.map(c=><div key={c} className={`color-swatch ${color===c?"selected":""}`} style={{background:c}} onClick={()=>setColor(c)}/>)}</div></div>
+          <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
+            <button className="btn-primary" style={{flex:1}} onClick={save}>{isNew?"Create Account":"Save Changes"}</button>
+            {!isNew&&onDelete&&<button onClick={onDelete} style={{background:"#f8717112",border:"1px solid #f8717133",color:"#f87171",borderRadius:10,padding:"11px 14px",cursor:"pointer",fontFamily:"DM Mono",fontSize:12}}>Delete</button>}
+            <button onClick={onClose} style={{background:"#1e1e30",border:"1px solid #2a2a40",color:"#888",borderRadius:10,padding:"11px 14px",cursor:"pointer",fontFamily:"DM Mono",fontSize:12}}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TransferModal({onClose,onSave,accounts}){
+  const [fromId,setFromId]=useState(accounts[0].id);
+  const [toId,setToId]=useState(accounts[1].id);
+  const [amount,setAmount]=useState("");
+  const [date,setDate]=useState(today());
+  const [note,setNote]=useState("");
+  const fromA=accounts.find(a=>a.id===fromId);
+  const toA=accounts.find(a=>a.id===toId);
+  const valid=amount&&parseFloat(amount)>0&&fromId!==toId;
+  const save=()=>{if(!valid)return;onSave({fromId,toId,amount:parseFloat(amount),date,note:note.trim()||"Transfer"});};
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{maxWidth:420}}>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Account Transfer</div>
+        <div style={{fontSize:11,color:"#555",marginBottom:20}}>Move money between your accounts</div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,padding:"14px",background:"#0d0d18",borderRadius:12,border:"1px solid #1e1e30"}}>
+          <div style={{flex:1,textAlign:"center"}}><div style={{fontSize:18,marginBottom:3}}>{fromA?.icon}</div><div style={{fontSize:11,color:fromA?.color,fontWeight:500}}>{fromA?.label}</div><div style={{fontSize:10,color:"#555",marginTop:2}}>From</div></div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flexShrink:0}}><div style={{fontSize:12,color:"#f59e0b",fontWeight:700}}>{amount?fmt(parseFloat(amount)||0):"———"}</div><div style={{fontSize:16,color:fromId===toId?"#f87171":"#f59e0b"}}>→</div></div>
+          <div style={{flex:1,textAlign:"center"}}><div style={{fontSize:18,marginBottom:3}}>{toA?.icon}</div><div style={{fontSize:11,color:toA?.color,fontWeight:500}}>{toA?.label}</div><div style={{fontSize:10,color:"#555",marginTop:2}}>To</div></div>
+        </div>
+        {fromId===toId&&<div style={{fontSize:11,color:"#f87171",marginBottom:14,textAlign:"center"}}>Source and destination must differ</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div><label className="lbl">From</label><select className="input-field" value={fromId} onChange={e=>setFromId(e.target.value)}>{accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}</select></div>
+            <div><label className="lbl">To</label><select className="input-field" value={toId} onChange={e=>setToId(e.target.value)}>{accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}</select></div>
+          </div>
+          <div><label className="lbl">Amount</label><input className="input-field" type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e=>setAmount(e.target.value)} autoFocus/></div>
+          <div><label className="lbl">Date</label><input type="date" className="input-field" value={date} onChange={e=>setDate(e.target.value)}/></div>
+          <div><label className="lbl">Note <span style={{color:"#444",textTransform:"none",fontSize:10}}>(optional)</span></label><input className="input-field" placeholder="e.g. Moving to savings…" value={note} onChange={e=>setNote(e.target.value)}/></div>
+          <div style={{display:"flex",gap:10,marginTop:4}}>
+            <button onClick={save} style={{flex:1,background:"#f59e0b22",color:"#f59e0b",border:"1px solid #f59e0b44",borderRadius:10,padding:"11px 0",cursor:valid?"pointer":"not-allowed",fontFamily:"DM Mono",fontSize:13,opacity:valid?1:.5,transition:"all .2s"}}>Confirm Transfer</button>
+            <button onClick={onClose} style={{background:"#1e1e30",border:"1px solid #2a2a40",color:"#888",borderRadius:10,padding:"11px 18px",cursor:"pointer",fontFamily:"DM Mono",fontSize:13}}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Scheduled Payment Modal ─────────────────────────────────────────────── */
+const WEEKDAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+function SchedModal({onClose,onSave,accounts,categories,editing}){
+  const expCats=categories.filter(c=>c.id!=="income");
+  // isIncome: whether this is income (positive) or expense (negative)
+  const [isIncome,setIsIncome]=useState(editing?!!(editing.isIncome):false);
+  // recurrenceType: "monthly" | "weekly"
+  const [recType,setRecType]=useState(editing?(editing.recurrenceType||"monthly"):"monthly");
+  const [desc,setDesc]=useState(editing?editing.desc:"");
+  const [amount,setAmount]=useState(editing?String(editing.amount):"");
+  const [category,setCategory]=useState(editing?(editing.category||(editing.isIncome?"income":"misc")):"misc");
+  const [account,setAccount]=useState(editing?editing.account:accounts[0].id);
+  const [dayOfMonth,setDayOfMonth]=useState(editing?editing.dayOfMonth:1);
+  const [dayOfWeek,setDayOfWeek]=useState(editing!=null&&editing.dayOfWeek!=null?editing.dayOfWeek:5);
+
+  // When switching income/expense, reset category to appropriate default
+  function switchType(toIncome){
+    setIsIncome(toIncome);
+    setCategory(toIncome?"income":"misc");
+  }
+
+  const save=()=>{
+    const a=parseFloat(amount);
+    if(!desc.trim()||isNaN(a)||a<=0)return;
+    onSave({
+      desc:desc.trim(),amount:a,category,account,isIncome,
+      recurrenceType:recType,
+      dayOfMonth:recType==="monthly"?parseInt(dayOfMonth):null,
+      dayOfWeek:recType==="weekly"?parseInt(dayOfWeek):null,
+    });
+  };
+
+  const accentColor=isIncome?"#4ade80":"#a78bfa";
+
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{maxWidth:400}}>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:800,marginBottom:20}}>
+          {editing?"Edit Schedule":"New Scheduled Entry"}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+
+          {/* Income / Expense toggle */}
+          <div>
+            <label className="lbl">Type</label>
+            <div style={{display:"flex",gap:0,background:"#1a1a28",borderRadius:10,padding:4}}>
+              {[[false,"↓ Expense"],[true,"↑ Income"]].map(([val,lbl])=>(
+                <button key={String(val)} onClick={()=>switchType(val)}
+                  style={{flex:1,background:isIncome===val?(val?"#4ade8022":"#f8717122"):"none",border:isIncome===val?`1px solid ${val?"#4ade8044":"#f8717144"}`:"1px solid transparent",color:isIncome===val?(val?"#4ade80":"#f87171"):"#555",borderRadius:8,padding:"9px 0",cursor:"pointer",fontFamily:"DM Mono",fontSize:12,transition:"all .15s"}}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Recurrence type toggle */}
+          <div>
+            <label className="lbl">Repeats</label>
+            <div style={{display:"flex",gap:0,background:"#1a1a28",borderRadius:10,padding:4}}>
+              {[["monthly","📅 Monthly"],["weekly","🔁 Weekly"]].map(([val,lbl])=>(
+                <button key={val} onClick={()=>setRecType(val)}
+                  style={{flex:1,background:recType===val?"#7c6fff22":"none",border:recType===val?"1px solid #7c6fff44":"1px solid transparent",color:recType===val?"#a78bfa":"#555",borderRadius:8,padding:"9px 0",cursor:"pointer",fontFamily:"DM Mono",fontSize:12,transition:"all .15s"}}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div><label className="lbl">Description</label><input className="input-field" placeholder={isIncome?"e.g. Paycheck, Freelance…":"e.g. Netflix, Rent…"} value={desc} onChange={e=>setDesc(e.target.value)} autoFocus/></div>
+          <div><label className="lbl">Amount</label><input className="input-field" type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e=>setAmount(e.target.value)}/></div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>
+              {recType==="monthly"?(
+                <>
+                  <label className="lbl">Day of Month</label>
+                  <select className="input-field" value={dayOfMonth} onChange={e=>setDayOfMonth(e.target.value)}>
+                    {DAYS.map(d=><option key={d} value={d}>{ordinal(d)}</option>)}
+                  </select>
+                </>
+              ):(
+                <>
+                  <label className="lbl">Day of Week</label>
+                  <select className="input-field" value={dayOfWeek} onChange={e=>setDayOfWeek(e.target.value)}>
+                    {WEEKDAYS.map((d,i)=><option key={i} value={i}>{d}</option>)}
+                  </select>
+                </>
+              )}
+            </div>
+            <div>
+              <label className="lbl">Account</label>
+              <select className="input-field" value={account} onChange={e=>setAccount(e.target.value)}>
+                {accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div><label className="lbl">Category</label>
+            <select className="input-field" value={category} onChange={e=>setCategory(e.target.value)}>
+              {(isIncome?categories.filter(c=>c.id==="income"):expCats).map(c=>(
+                <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Preview */}
+          <div style={{padding:"10px 12px",background:"#0d0d18",borderRadius:9,border:`1px solid ${accentColor}33`,fontSize:11,color:"#555"}}>
+            <span style={{color:accentColor}}>{isIncome?"↑ Income":"↓ Expense"}</span>
+            {" — "}
+            {recType==="monthly"
+              ? <>on the <span style={{color:accentColor}}>{ordinal(dayOfMonth)}</span> of each month</>
+              : <>every <span style={{color:accentColor}}>{WEEKDAYS[dayOfWeek]}</span></>
+            }
+            {amount&&!isNaN(parseFloat(amount))&&<span style={{color:isIncome?"#4ade80":"#f87171",marginLeft:8,fontWeight:600}}>{isIncome?"+":"-"}{fmt(parseFloat(amount)||0)}</span>}
+          </div>
+
+          <div style={{display:"flex",gap:10}}>
+            <button className="btn-primary" style={{flex:1,background:isIncome?"#22c55e":"#7c6fff"}} onClick={save}>{editing?"Save Changes":"Add Schedule"}</button>
+            <button onClick={onClose} style={{background:"#1e1e30",border:"1px solid #2a2a40",color:"#888",borderRadius:10,padding:"11px 18px",cursor:"pointer",fontFamily:"DM Mono",fontSize:13}}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Quick-Add Modal ────────────────────────────────────────── */
+function QuickAddModal({editing,accounts,categories,onClose,onSave,onDelete}){
+  const isNew=!editing?.id;
+  const expCats=categories.filter(c=>c.id!=="income");
+  const [desc,setDesc]=useState(editing?.desc||"");
+  const [amount,setAmount]=useState(editing?.amount||"");
+  const [type,setType]=useState(editing?.type||"expense");
+  const [cat,setCat]=useState(editing?.cat||(editing?.type==="income"?"income":"misc"));
+  const [acct,setAcct]=useState(editing?.acct||accounts[0]?.id||"chk1");
+  function switchType(t){setType(t);setCat(t==="income"?"income":"misc");}
+  const save=()=>{
+    if(!desc.trim()||!amount||isNaN(parseFloat(amount)))return;
+    onSave({desc:desc.trim(),amount,type,cat,acct});
+  };
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{maxWidth:400}}>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:800,marginBottom:20}}>
+          {isNew?"New Quick-Add":"Edit Quick-Add"}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{display:"flex",gap:0,background:"#1a1a28",borderRadius:10,padding:4}}>
+            {[["expense","↓ Expense"],["income","↑ Income"]].map(([val,lbl])=>(
+              <button key={val} onClick={()=>switchType(val)}
+                style={{flex:1,background:type===val?(val==="income"?"#4ade8022":"#f8717122"):"none",border:type===val?`1px solid ${val==="income"?"#4ade8044":"#f8717144"}`:"1px solid transparent",color:type===val?(val==="income"?"#4ade80":"#f87171"):"#555",borderRadius:8,padding:"8px 0",cursor:"pointer",fontFamily:"DM Mono",fontSize:12,transition:"all .15s"}}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <div><label className="lbl">Description</label>
+            <input className="input-field" placeholder="e.g. Paycheck, Netflix…" value={desc} onChange={e=>setDesc(e.target.value)} autoFocus/>
+          </div>
+          <div><label className="lbl">Amount</label>
+            <input className="input-field" type="number" min="0" step="0.01" placeholder="0.00" value={amount} onChange={e=>setAmount(e.target.value)}/>
+          </div>
+          <div><label className="lbl">Category</label>
+            <select className="input-field" value={cat} onChange={e=>setCat(e.target.value)}>
+              {(type==="income"?categories.filter(c=>c.id==="income"):expCats).map(c=>(
+                <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+              ))}
+            </select>
+          </div>
+          <div><label className="lbl">Account</label>
+            <select className="input-field" value={acct} onChange={e=>setAcct(e.target.value)}>
+              {accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+            </select>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
+            <button className="btn-primary" style={{flex:1}} onClick={save}>{isNew?"Add Quick-Add":"Save"}</button>
+            {!isNew&&<button onClick={onDelete} style={{background:"#f8717112",border:"1px solid #f8717133",color:"#f87171",borderRadius:10,padding:"11px 14px",cursor:"pointer",fontFamily:"DM Mono",fontSize:12}}>Delete</button>}
+            <button onClick={onClose} style={{background:"#1e1e30",border:"1px solid #2a2a40",color:"#888",borderRadius:10,padding:"11px 14px",cursor:"pointer",fontFamily:"DM Mono",fontSize:12}}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Confirm Modal ───────────────────────────────────────────────────────── */
+function ConfirmModal({title,body,confirmLabel,cancelLabel,dismissLabel,onConfirm,onCancel,onDismiss}){
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&(onDismiss||onCancel)()}>
+      <div className="modal" style={{maxWidth:380}}>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:800,marginBottom:10}}>{title}</div>
+        <div style={{fontSize:13,color:"#aaa",lineHeight:1.6,marginBottom:22,whiteSpace:"pre-line"}}>{body}</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <button className="btn-primary" style={{width:"100%"}} onClick={onConfirm}>{confirmLabel||"Confirm"}</button>
+          {cancelLabel&&<button onClick={onCancel} style={{background:"#1e1e30",border:"1px solid #2a2a40",color:"#888",borderRadius:10,padding:"13px",cursor:"pointer",fontFamily:"DM Mono",fontSize:13,width:"100%"}}>{cancelLabel}</button>}
+          {dismissLabel&&<button onClick={onDismiss||onCancel} style={{background:"none",border:"none",color:"#555",padding:"8px",cursor:"pointer",fontFamily:"DM Mono",fontSize:12,width:"100%"}}>{dismissLabel}</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── CSV Import Modal ───────────────────────────────────────────────────── */
+function CsvModal({data,accounts,categories,onClose,onConfirm}){
+  const {rows,file}=data;
+  const catColor=id=>(categories.find(c=>c.id===id)||{color:"#94a3b8"}).color;
+  const catLabel=id=>(categories.find(c=>c.id===id)||{label:id}).label;
+  const acctById=id=>accounts.find(a=>a.id===id)||{label:id,color:"#94a3b8"};
+  const income=rows.filter(r=>r.amount>0).reduce((s,r)=>s+r.amount,0);
+  const expenses=rows.filter(r=>r.amount<0).reduce((s,r)=>s+r.amount,0);
+  function fmt(n){const abs=Math.abs(n),s=abs.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});return n<0?`−$${s}`:`$${s}`;}
+  return(
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal" style={{maxWidth:580,width:"100%"}}>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:800,marginBottom:4}}>Import CSV</div>
+        <div style={{fontSize:11,color:"#555",marginBottom:16}}>{file} · {rows.length} transaction{rows.length!==1?"s":""} found</div>
+        {/* Summary strip */}
+        <div style={{display:"flex",gap:16,padding:"10px 14px",background:"#0d0d18",borderRadius:10,border:"1px solid #1e1e30",marginBottom:14,fontSize:12,flexWrap:"wrap"}}>
+          <span><span style={{color:"#555"}}>Rows </span><span style={{color:"#e8e6f0"}}>{rows.length}</span></span>
+          <span><span style={{color:"#555"}}>In </span><span style={{color:"#4ade80"}}>{fmt(income)}</span></span>
+          <span><span style={{color:"#555"}}>Out </span><span style={{color:"#f87171"}}>{fmt(expenses)}</span></span>
+        </div>
+        {/* Preview table */}
+        <div style={{maxHeight:280,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:3}}>
+          {rows.slice(0,50).map((r,i)=>{
+            const acct=acctById(r.account);
+            return(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#0f0f1a",border:"1px solid #1a1a28",borderRadius:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11,color:"#ccc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.desc}</div>
+                  <div style={{display:"flex",gap:6,marginTop:2,alignItems:"center",flexWrap:"wrap"}}>
+                    <span style={{fontSize:10,color:"#555"}}>{r.date}</span>
+                    <span style={{fontSize:10,color:catColor(r.category)}}>{catLabel(r.category)}</span>
+                    <span style={{fontSize:10,color:acct.color,background:`${acct.color}18`,border:`1px solid ${acct.color}33`,padding:"1px 6px",borderRadius:999}}>{acct.label}</span>
+                  </div>
+                </div>
+                <div style={{fontSize:12,fontWeight:500,color:r.amount>=0?"#4ade80":"#f87171",flexShrink:0}}>{fmt(r.amount)}</div>
+              </div>
+            );
+          })}
+          {rows.length>50&&<div style={{fontSize:11,color:"#555",textAlign:"center",padding:"6px 0"}}>…and {rows.length-50} more</div>}
+        </div>
+        <div style={{fontSize:10,color:"#555",marginBottom:14,padding:"8px 12px",background:"#1a1a28",borderRadius:8}}>
+          💡 Categories and accounts are matched by name. Unmatched rows default to <strong style={{color:"#94a3b8"}}>Misc</strong> / <strong style={{color:"#60a5fa"}}>Checking 1</strong>.
+        </div>
+        <div style={{display:"flex",gap:10}}>
+          <button className="btn-primary" style={{flex:1}} onClick={()=>onConfirm(rows)}>Import {rows.length} Transactions</button>
+          <button onClick={onClose} style={{background:"#1e1e30",border:"1px solid #2a2a40",color:"#888",borderRadius:10,padding:"11px 18px",cursor:"pointer",fontFamily:"DM Mono",fontSize:13}}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Main App ────────────────────────────────────────────────────────────── */
+function App(){
+  const [transactions, setTransactions]=useState(loadTx);
+  const [categories,   setCategories]  =useState(()=>{
+    const saved=load(CAT_KEY,null);
+    if(!saved) return DEFAULT_CATEGORIES;
+    // Merge: add any built-in categories missing from saved data
+    const savedIds=new Set(saved.map(c=>c.id));
+    const missing=DEFAULT_CATEGORIES.filter(c=>c.builtIn&&!savedIds.has(c.id));
+    return missing.length ? [...saved,...missing] : saved;
+  });
+  const [accounts,     setAccounts]    =useState(()=>{
+    const p=load(ACCT_KEY,DEFAULT_ACCOUNTS);
+    nextAcctId=Math.max(...p.map(a=>parseInt(String(a.id).replace(/[^0-9]/g,""))||0),9)+1;
+    return p;
+  });
+  const [scheduled,    setScheduled]   =useState(loadSched);
+  const [wb,           setWb]          =useState(loadWB); // {income, bills, weekTx}
+  const [view,         setView]        =useState("dashboard");
+  const [filterMonth,  setFilterMonth] =useState(0);
+  const [filterAcct,   setFilterAcct]  =useState("all");
+  const [filterCat,    setFilterCat]   =useState("all");
+  const [filterType,   setFilterType]  =useState("all"); // all|income|expense|transfer
+  const [filterDateFrom,setFilterDateFrom]=useState("");
+  const [filterDateTo,  setFilterDateTo]  =useState("");
+  const [filterAmtMin,  setFilterAmtMin]  =useState("");
+  const [filterAmtMax,  setFilterAmtMax]  =useState("");
+  const [sortBy,       setSortBy]      =useState("date-desc"); // date-desc|date-asc|amount-desc|amount-asc
+  const [showAdvanced, setShowAdvanced]=useState(false);
+  const [form,setForm]=useState({date:today(),desc:"",amount:"",category:"misc",type:"expense",account:"chk1"});
+  const [search,setSearch]=useState("");
+  const [editId,setEditId]=useState(null);
+  const [toast,setToast]=useState(null);
+  const [catModal,setCatModal]=useState(false);
+  const [acctModal,setAcctModal]=useState(false);
+  const [xferModal,setXferModal]=useState(false);
+  const [schedModal,setSchedModal]=useState(false); // false|"new"|schedObj
+  const [csvModal,setCsvModal]=useState(false);
+  const [confirmModal,setConfirmModal]=useState(null);
+  const [settingsOpen,setSettingsOpen]=useState(false);
+  const [sheetUrl,setSheetUrl]=useState(loadSheetUrl);
+  const [sheetUrlInput,setSheetUrlInput]=useState(loadSheetUrl);
+  const [syncStatus,setSyncStatus]=useState("idle"); // idle|syncing|ok|error
+  const [lastSync,setLastSync]=useState(null);
+  const csvFileRef=useRef(null);
+  const syncTimer=useRef(null);
+  const syncReady=useRef(false); // blocks writes until initial sheet load completes
+
+  // Weekly budget tx form
+  const [wtxForm,setWtxForm]=useState({date:today(),desc:"",amount:""});
+  const [wbAccount,setWbAccount]=useState("all"); // "all" or account id
+  const [quickAdds,setQuickAdds]=useState(()=>load(QA_KEY,DEFAULT_QUICKADD));
+  const [qaModal,setQaModal]=useState(false); // false | "new" | qaObj
+
+
+  // Always save to localStorage
+  useEffect(()=>{save(TX_KEY,transactions);},[transactions]);
+  useEffect(()=>{save(QA_KEY,quickAdds);},[quickAdds]);
+  useEffect(()=>{save(CAT_KEY,categories);},[categories]);
+  useEffect(()=>{save(ACCT_KEY,accounts);},[accounts]);
+  useEffect(()=>{save(SCHED_KEY,scheduled);},[scheduled]);
+  useEffect(()=>{save(WB_KEY,wb);},[wb]);
+
+  // On first load: if a sheet URL is saved, read from sheet before allowing any writes
+  useEffect(()=>{
+    if(!sheetUrl){syncReady.current=true;return;}
+    // Check if this browser has existing local data
+    const hasLocalData=!!localStorage.getItem(TX_KEY);
+    if(hasLocalData){
+      // Already have data locally — safe to write, just mark ready
+      syncReady.current=true;
+    } else {
+      // Fresh browser — pull from sheet first, THEN allow writes
+      setSyncStatus("syncing");
+      syncFromSheet(true).then(()=>{
+        syncReady.current=true;
+      });
+    }
+  },[]);
+
+  // Debounced sync to Google Sheets (waits 2s after last change, only if syncReady)
+  useEffect(()=>{
+    if(!sheetUrl||!syncReady.current)return;
+    clearTimeout(syncTimer.current);
+    syncTimer.current=setTimeout(()=>syncToSheet(),2000);
+    return()=>clearTimeout(syncTimer.current);
+  },[transactions,categories,accounts,scheduled,wb,sheetUrl]);
+
+  async function syncToSheet(){
+    if(!sheetUrl||!syncReady.current){return;}
+    setSyncStatus("syncing");
+    try{
+      await sheetWrite(sheetUrl,{
+        transactions,
+        scheduled,
+        accounts,
+        categories,
+        weekly_budget:encodeWb(wb),
+      });
+      // Wait briefly then verify with a read-back
+      await new Promise(r=>setTimeout(r,1500));
+      const verify=await sheetRead(sheetUrl);
+      const savedCount=verify?.transactions?.length??-1;
+      if(savedCount>=0){
+        setSyncStatus("ok");
+        setLastSync(new Date());
+        setTimeout(()=>setSyncStatus("idle"),3000);
+      } else {
+        setSyncStatus("error");
+      }
+    }catch(err){
+      console.error("Sheet sync failed:",err);
+      setSyncStatus("error");
+    }
+  }
+
+  async function syncFromSheet(silent=false){
+    if(!sheetUrl)return;
+    setSyncStatus("syncing");
+    try{
+      const data=await sheetRead(sheetUrl);
+      if(data.transactions?.length){
+        nextId=Math.max(...data.transactions.map(t=>Number(t.id)||0),17)+1;
+        setTransactions(data.transactions.map(t=>({...t,id:Number(t.id),amount:Number(t.amount)})));
+      }
+      if(data.scheduled?.length){
+        nextSchedId=Math.max(...data.scheduled.map(s=>parseInt(String(s.id).replace("s",""))||0),9)+1;
+        setScheduled(data.scheduled.map(s=>({isIncome:false,...s,amount:Number(s.amount)})));
+      }
+      if(data.accounts?.length){
+        setAccounts(data.accounts.map(a=>({...a,startBalance:Number(a.startBalance)})));
+      }
+      if(data.categories?.length){
+        setCategories(data.categories);
+      }
+      if(data.weekly_budget?.length){
+        const decoded=decodeWb(data.weekly_budget);
+        if(decoded.bills)nextWbId=Math.max(...decoded.bills.map(b=>parseInt(String(b.id).replace("wb",""))||0),9)+1;
+        if(decoded.weekTx)nextWtxId=Math.max(...decoded.weekTx.map(t=>parseInt(String(t.id).replace("wt",""))||0),0)+1;
+        setWb(decoded);
+      }
+      setSyncStatus("ok");
+      setLastSync(new Date());
+      setTimeout(()=>setSyncStatus("idle"),3000);
+      if(!silent) showToast("Synced from Google Sheets ✓");
+    }catch(err){
+      console.error("Sheet load failed:",err);
+      setSyncStatus("error");
+      if(!silent) showToast("Sync failed: "+err.message,false);
+    }
+  }
+
+  function saveSheetUrlAndConnect(url){
+    const trimmed=url.trim();
+    saveSheetUrl(trimmed);
+    setSheetUrl(trimmed);
+    syncReady.current=false; // reset so connect always reads first
+    setSettingsOpen(false);
+    if(trimmed){
+      syncFromSheet(false).then(()=>{ syncReady.current=true; });
+    } else {
+      syncReady.current=true;
+    }
+  }
+
+  // Check & apply due scheduled payments on load
+  // Uses a separate localStorage key to track applied dates — never double-applies
+  useEffect(()=>{
+    const now=new Date();
+    const todayDay=now.getDate();
+    const todayDow=now.getDay();
+    const todayStr=today();
+
+    // Load the applied log: { "s1_2025-03-18": true, ... }
+    let appliedLog={};
+    try{ appliedLog=JSON.parse(localStorage.getItem("ledger_applied_log")||"{}"); }catch(e){}
+
+    const toApply=[];
+    scheduled.forEach(s=>{
+      if(!s.active)return;
+      const recType=s.recurrenceType||"monthly";
+      const isDue=recType==="weekly" ? s.dayOfWeek===todayDow : s.dayOfMonth===todayDay;
+      if(!isDue)return;
+      const logKey=`${s.id}_${todayStr}`;
+      if(appliedLog[logKey])return; // already applied today
+      const amt=s.isIncome ? s.amount : -s.amount;
+      toApply.push({id:nextId++,date:todayStr,desc:s.desc,amount:amt,category:s.category,account:s.account,scheduledId:s.id,logKey});
+    });
+
+    if(toApply.length){
+      // Mark all as applied in the log before adding transactions
+      toApply.forEach(t=>{ appliedLog[t.logKey]=true; });
+      localStorage.setItem("ledger_applied_log",JSON.stringify(appliedLog));
+      const newTx=toApply.map(({logKey,...t})=>t);
+      setTransactions(prev=>[...prev,...newTx]);
+      showToast(`${toApply.length} scheduled payment${toApply.length>1?"s":""} applied`);
+    }
+  },[]);
+
+  const acctById=id=>accounts.find(a=>a.id===id)||{label:id,color:"#94a3b8",icon:"🏦",type:"checking",startBalance:0};
+  const catColor=id=>(categories.find(c=>c.id===id)||{color:"#94a3b8"}).color;
+  const catLabel=id=>(categories.find(c=>c.id===id)||{label:id}).label;
+  const catIcon =id=>(categories.find(c=>c.id===id)||{icon:"•"}).icon;
+  const showToast=(msg,ok=true)=>{setToast({msg,ok});setTimeout(()=>setToast(null),2500);};
+
+  const acctBalance=id=>{
+    const acct=acctById(id);
+    return acct.startBalance+transactions.filter(t=>t.account===id).reduce((s,t)=>s+t.amount,0);
+  };
+
+  const filtered=transactions.filter(t=>{
+    const d=new Date(t.date);
+    const amt=Math.abs(t.amount);
+    const minAmt=filterAmtMin?parseFloat(filterAmtMin):null;
+    const maxAmt=filterAmtMax?parseFloat(filterAmtMax):null;
+    if(filterMonth!==0&&d.getMonth()+1!==filterMonth)return false;
+    if(filterAcct!=="all"&&t.account!==filterAcct)return false;
+    if(filterCat!=="all"&&t.category!==filterCat)return false;
+    if(search&&!t.desc.toLowerCase().includes(search.toLowerCase()))return false;
+    if(filterDateFrom&&t.date<filterDateFrom)return false;
+    if(filterDateTo&&t.date>filterDateTo)return false;
+    if(minAmt!==null&&amt<minAmt)return false;
+    if(maxAmt!==null&&amt>maxAmt)return false;
+    if(filterType==="income"&&t.amount<=0)return false;
+    if(filterType==="expense"&&(t.amount>=0||t.isTransfer))return false;
+    if(filterType==="transfer"&&!t.isTransfer)return false;
+    return true;
+  });
+  const nonXfer=f=>f.filter(t=>!t.isTransfer);
+  const totalIncome  =nonXfer(filtered).filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0);
+  const totalExpenses=nonXfer(filtered).filter(t=>t.amount<0).reduce((s,t)=>s+t.amount,0);
+  const net=totalIncome+totalExpenses;
+
+  const catTotals=categories.map(c=>({...c,total:nonXfer(filtered).filter(t=>t.category===c.id&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0)})).filter(c=>c.total>0);
+  const maxCat=Math.max(...catTotals.map(c=>c.total),1);
+  const monthlyData=MONTHS.map((m,i)=>{
+    const base=(filterAcct==="all"?transactions:transactions.filter(t=>t.account===filterAcct)).filter(t=>!t.isTransfer);
+    return{m,inc:base.filter(t=>new Date(t.date).getMonth()===i&&t.amount>0).reduce((s,t)=>s+t.amount,0),
+              exp:base.filter(t=>new Date(t.date).getMonth()===i&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0)};
+  }).filter(d=>d.inc>0||d.exp>0);
+  const maxBar=Math.max(...monthlyData.flatMap(d=>[d.inc,d.exp]),1);
+
+  /* ── Handlers ── */
+  function handleAdd(e){
+    e.preventDefault();
+    if(!form.desc||!form.amount)return;
+    const amt=parseFloat(form.amount);if(isNaN(amt))return;
+    const finalAmt=form.type==="expense"?-Math.abs(amt):Math.abs(amt);
+    if(editId!==null){
+      setTransactions(prev=>prev.map(t=>t.id===editId?{...t,date:form.date,desc:form.desc,amount:finalAmt,category:form.category,account:form.account}:t));
+      setEditId(null);showToast("Updated");
+    }else{
+      setTransactions(prev=>[...prev,{id:nextId++,date:form.date,desc:form.desc,amount:finalAmt,category:form.category,account:form.account}]);
+      showToast("Added");
+    }
+    setForm({date:today(),desc:"",amount:"",category:"misc",type:"expense",account:form.account});
+    setView("log");
+  }
+
+  function handleEdit(t){
+    if(t.isTransfer){showToast("Delete and re-create transfers",false);return;}
+    setForm({date:t.date,desc:t.desc,amount:String(Math.abs(t.amount)),category:t.category,type:t.amount>=0?"income":"expense",account:t.account||"chk1"});
+    setEditId(t.id);setView("add");
+  }
+
+  function handleDelete(id){
+    const tx=transactions.find(t=>t.id===id);
+    if(tx?.isTransfer&&tx?.transferId){setTransactions(prev=>prev.filter(t=>t.transferId!==tx.transferId));showToast("Transfer deleted",false);}
+    else{setTransactions(prev=>prev.filter(t=>t.id!==id));showToast("Deleted",false);}
+  }
+
+  function handleTransfer({fromId,toId,amount,date,note}){
+    const tid="xfer_"+Date.now();
+    setTransactions(prev=>[...prev,
+      {id:nextId++,date,desc:note,amount:-amount,category:"savings",account:fromId,isTransfer:true,transferId:tid,transferTo:toId},
+      {id:nextId++,date,desc:note,amount: amount,category:"savings",account:toId, isTransfer:true,transferId:tid,transferFrom:fromId},
+    ]);
+    setXferModal(false);showToast(`Transferred ${fmt(amount)} → ${acctById(toId).label}`);
+  }
+
+  function handleSaveCat({label,color,icon}){
+    if(catModal==="new"){const id=label.toLowerCase().replace(/[^a-z0-9]+/g,"_")+"_"+Date.now();setCategories(prev=>[...prev,{id,label,color,icon,builtIn:false}]);setForm(f=>({...f,category:id}));showToast(`"${label}" created`);}
+    else{setCategories(prev=>prev.map(c=>c.id===catModal.id?{...c,label,color,icon}:c));showToast("Updated");}
+    setCatModal(false);
+  }
+  function handleDeleteCat(id){
+    if(transactions.some(t=>t.category===id)){if(!window.confirm("Move transactions to Misc?"))return;setTransactions(prev=>prev.map(t=>t.category===id?{...t,category:"misc"}:t));}
+    setCategories(prev=>prev.filter(c=>c.id!==id));showToast("Deleted",false);
+  }
+  function handleSaveAcct({label,color,startBalance,type,icon}){
+    if(acctModal.id){
+      // Edit existing
+      setAccounts(prev=>prev.map(a=>a.id===acctModal.id?{...a,label,color,startBalance,type,icon}:a));
+      showToast("Account updated");
+    } else {
+      // Add new
+      const id="acct"+nextAcctId++;
+      setAccounts(prev=>[...prev,{id,label,color,startBalance,type,icon}]);
+      showToast("Account added");
+    }
+    setAcctModal(false);
+  }
+  function handleDeleteAcct(id){
+    const acctName=accounts.find(a=>a.id===id)?.label||"this account";
+    const txCount=transactions.filter(t=>t.account===id).length;
+    const schedCount=scheduled.filter(s=>s.account===id).length;
+    const fallback=accounts.find(a=>a.id!==id)?.id||null;
+
+    function doDelete(reassign){
+      // Handle transactions
+      if(txCount>0){
+        if(reassign&&fallback){
+          setTransactions(prev=>prev.map(t=>t.account===id?{...t,account:fallback}:t));
+        } else {
+          setTransactions(prev=>prev.filter(t=>t.account!==id));
+        }
+      }
+      // Handle scheduled payments
+      if(schedCount>0){
+        if(reassign&&fallback){
+          setScheduled(prev=>prev.map(s=>s.account===id?{...s,account:fallback}:s));
+        } else {
+          setScheduled(prev=>prev.filter(s=>s.account!==id));
+        }
+      }
+      // Clean up incomeByAccount
+      setWb(prev=>{
+        const iba={...(prev.incomeByAccount||{})};
+        delete iba[id];
+        return{...prev,incomeByAccount:iba};
+      });
+      setAccounts(prev=>prev.filter(a=>a.id!==id));
+      setAcctModal(false);
+      showToast(`"${acctName}" deleted`,false);
+      setConfirmModal(null);
+    }
+
+    if(txCount===0&&schedCount===0){
+      setConfirmModal({
+        title:`Delete "${acctName}"?`,
+        body:`This account has no transactions or scheduled payments.\n\nThis cannot be undone.`,
+        confirmLabel:"Delete Account",
+        cancelLabel:"Cancel",
+        onConfirm:()=>doDelete(false),
+        onCancel:()=>setConfirmModal(null),
+      });
+    } else {
+      const fallbackName=fallback?accounts.find(a=>a.id===fallback)?.label:"another account";
+      const summary=[];
+      if(txCount>0) summary.push(`${txCount} transaction${txCount!==1?"s":""}`);
+      if(schedCount>0) summary.push(`${schedCount} scheduled payment${schedCount!==1?"s":""}`);
+      setConfirmModal({
+        title:`Delete "${acctName}"?`,
+        body:`This account has ${summary.join(" and ")}.\n\nChoose what to do with them:`,
+        confirmLabel:fallback?`Move to ${fallbackName}`:"Delete All Data",
+        cancelLabel:"Delete All Data",
+        dismissLabel:"Cancel — keep account",
+        onConfirm:()=>doDelete(!!fallback),
+        onCancel:()=>doDelete(false),
+        onDismiss:()=>setConfirmModal(null),
+      });
+    }
+  }
+
+  /* ── Scheduled ── */
+  function handleSaveSched({desc,amount,category,account,isIncome,recurrenceType,dayOfMonth,dayOfWeek}){
+    if(schedModal==="new"){
+      setScheduled(prev=>[...prev,{id:"s"+nextSchedId++,desc,amount,category,account,isIncome:!!isIncome,recurrenceType,dayOfMonth,dayOfWeek,active:true}]);
+      showToast("Schedule added");
+    }else{
+      setScheduled(prev=>prev.map(s=>s.id===schedModal.id?{...s,desc,amount,category,account,isIncome:!!isIncome,recurrenceType,dayOfMonth,dayOfWeek}:s));
+      showToast("Schedule updated");
+    }
+    setSchedModal(false);
+  }
+  function toggleSched(id){setScheduled(prev=>prev.map(s=>s.id===id?{...s,active:!s.active}:s));}
+  function deleteSched(id){setScheduled(prev=>prev.filter(s=>s.id!==id));showToast("Schedule removed",false);}
+  function applySchedNow(s){
+    const amt=s.isIncome ? s.amount : -s.amount;
+    setTransactions(prev=>[...prev,{id:nextId++,date:today(),desc:s.desc,amount:amt,category:s.category,account:s.account,scheduledId:s.id}]);
+    showToast(`"${s.desc}" added to transactions`);
+  }
+
+  /* ── Weekly Budget ── */
+  // Compute current Fri-Thu week window
+  function getWeekWindow(){
+    const now=new Date();
+    const day=now.getDay(); // 0=Sun,1=Mon,...,5=Fri,6=Sat
+    // days since last Friday
+    const sinceF=day>=5?day-5:day+2;
+    const fri=new Date(now); fri.setDate(now.getDate()-sinceF); fri.setHours(0,0,0,0);
+    const thu=new Date(fri); thu.setDate(fri.getDate()+6); thu.setHours(23,59,59,999);
+    return{fri,thu};
+  }
+  const {fri:weekStart,thu:weekEnd}=getWeekWindow();
+  const weekStartStr=weekStart.toISOString().slice(0,10);
+  const weekEndStr=weekEnd.toISOString().slice(0,10);
+  function fmtDate(d){return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});}
+
+  // Helper: get scheduled bills for any 7-day window starting at startDate
+  function getSchedBillsForWindow(startDate){
+    const bills=[];
+    for(let i=0;i<7;i++){
+      const d=new Date(startDate); d.setDate(startDate.getDate()+i);
+      const dom=d.getDate(), dow=d.getDay();
+      scheduled.filter(s=>{
+        if(!s.active||s.isIncome)return false; // income doesn't count as a bill
+        const recType=s.recurrenceType||"monthly";
+        return recType==="weekly" ? s.dayOfWeek===dow : s.dayOfMonth===dom;
+      }).forEach(s=>bills.push({...s,dueDate:d.toISOString().slice(0,10)}));
+    }
+    return bills;
+  }
+
+  // Current week (Fri-Thu) — filtered by selected account
+  const weekSchedBills=getSchedBillsForWindow(weekStart)
+    .filter(b=>wbAccount==="all"||b.account===wbAccount);
+  const wbBillTotal=weekSchedBills.reduce((s,b)=>s+b.amount,0);
+  // Current income: per-account if one selected, else sum of all account incomes
+  const currentIncome=(()=>{
+    if(wbAccount==="all"){
+      return accounts.reduce((s,a)=>s+(wb.incomeByAccount?.[a.id]??0),0)||wb.income;
+    }
+    return wb.incomeByAccount?.[wbAccount]??wb.income;
+  })();
+
+  // Current account balance(s)
+  const currentBalance=(()=>{
+    if(wbAccount==="all") return accounts.reduce((s,a)=>s+acctBalance(a.id),0);
+    return acctBalance(wbAccount);
+  })();
+
+  const wbAvailable=currentIncome-wbBillTotal;
+  const wbSpent=wb.weekTx
+    .filter(t=>wbAccount==="all"||t.account===wbAccount)
+    .reduce((s,t)=>s+t.amount,0);
+  const wbRemaining=wbAvailable-wbSpent;
+
+  // Projected balance at end of this week: current balance + income - bills - weekly spending
+  const projectedBalanceWeek1=currentBalance+currentIncome-wbBillTotal-wbSpent;
+
+  // Next week window (Fri+7 → Thu+7)
+  const nextWeekStart=new Date(weekStart); nextWeekStart.setDate(weekStart.getDate()+7);
+  const nextWeekEnd=new Date(weekEnd);     nextWeekEnd.setDate(weekEnd.getDate()+7);
+  const nextWeekBills=getSchedBillsForWindow(nextWeekStart)
+    .filter(b=>wbAccount==="all"||b.account===wbAccount);
+  const nextWeekBillTotal=nextWeekBills.reduce((s,b)=>s+b.amount,0);
+  const nextWeekAvailable=currentIncome-nextWeekBillTotal;
+  const nextWeekTight=nextWeekAvailable<(currentIncome*0.2);
+
+  // Projected balance at end of next week
+  const projectedBalanceWeek2=projectedBalanceWeek1+currentIncome-nextWeekBillTotal;
+
+  // 2-week combined
+  const twoWeekBillTotal=wbBillTotal+nextWeekBillTotal;
+  const twoWeekAvailable=(currentIncome*2)-twoWeekBillTotal;
+  // Weeks where bills exceed balance+income (danger — can't actually pay)
+  const thisWeekOver=(currentBalance+currentIncome)<wbBillTotal;
+  const nextWeekOver=(projectedBalanceWeek1+currentIncome)<nextWeekBillTotal;
+
+  function addWbTx(){
+    const a=parseFloat(wtxForm.amount);
+    if(!wtxForm.desc.trim()||isNaN(a)||a<=0)return;
+    setWb(prev=>({...prev,weekTx:[...prev.weekTx,{id:"wt"+nextWtxId++,date:wtxForm.date,desc:wtxForm.desc.trim(),amount:a,account:wbAccount==="all"?accounts[0]?.id||"chk1":wbAccount}]}));
+    setWtxForm({date:today(),desc:"",amount:""});
+  }
+  function deleteWbTx(id){setWb(prev=>({...prev,weekTx:prev.weekTx.filter(t=>t.id!==id)}));}
+  function resetWeek(){
+    const visibleTx=wbAccount==="all"
+      ? wb.weekTx
+      : wb.weekTx.filter(t=>t.account===wbAccount);
+
+    function doClear(){
+      setWb(prev=>({...prev,weekTx:wbAccount==="all"?[]:prev.weekTx.filter(t=>t.account!==wbAccount)}));
+      showToast("Week cleared");
+      setConfirmModal(null);
+    }
+
+    if(visibleTx.length===0){doClear();return;}
+
+    const total=visibleTx.reduce((s,t)=>s+t.amount,0);
+    const acctLabel=wbAccount!=="all"?" · "+acctById(wbAccount).label:"";
+
+    function doTransfer(){
+      if(wbAccount==="all"){
+        const byAcct={};
+        wb.weekTx.forEach(t=>{
+          const aid=t.account||accounts[0]?.id||"chk1";
+          byAcct[aid]=(byAcct[aid]||0)+t.amount;
+        });
+        const newTx=Object.entries(byAcct).map(([aid,amt])=>({
+          id:nextId++,date:weekEndStr,desc:"Weekly Expenses",
+          amount:-amt,category:"misc",account:aid,
+        }));
+        setTransactions(prev=>[...prev,...newTx]);
+        showToast(`${newTx.length} Weekly Expenses transaction${newTx.length!==1?"s":""} added`);
+      } else {
+        setTransactions(prev=>[...prev,{
+          id:nextId++,date:weekEndStr,desc:"Weekly Expenses",
+          amount:-total,category:"misc",account:wbAccount,
+        }]);
+        showToast(`Weekly total −${fmt(total)} added`);
+      }
+      setWb(prev=>({...prev,weekTx:wbAccount==="all"?[]:prev.weekTx.filter(t=>t.account!==wbAccount)}));
+      setConfirmModal(null);
+    }
+
+    setConfirmModal({
+      title:"Reset Week",
+      body:`Date: ${weekEndStr}\nDescription: Weekly Expenses\nAmount: −${fmt(total)}${acctLabel}\n\nAdd this to your main transactions before clearing?`,
+      confirmLabel:"Add & Clear",
+      cancelLabel:"Just Clear",
+      onConfirm:doTransfer,
+      onCancel:doClear,
+    });
+  }
+
+  function handleExport(){
+    // Use regular minus sign (not Unicode −) so the CSV re-imports cleanly
+    const rows=[["Date","Description","Amount","Category","Account","Transfer","Scheduled"],...transactions.map(t=>[
+      t.date,
+      t.desc,
+      t.amount.toFixed(2), // plain number like -1491.00 or 1433.39
+      catLabel(t.category),
+      acctById(t.account).label,
+      t.isTransfer?"Yes":"No",
+      t.scheduledId?"Yes":"No",
+    ])];
+    const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download="ledger.csv";a.click();
+  }
+  function handleReset(){
+    if(window.confirm("Reset ALL data?")){
+      nextId=18;nextSchedId=10;nextWbId=10;nextWtxId=1;
+      localStorage.removeItem("ledger_applied_log");
+      setTransactions(loadTx());setCategories(DEFAULT_CATEGORIES);setAccounts(DEFAULT_ACCOUNTS);
+      setScheduled(DEFAULT_SCHEDULED);setWb({income:1433.39,bills:DEFAULT_WEEKLY_BILLS,weekTx:[]});
+      showToast("Reset complete");
+    }
+  }
+
+  /* ── CSV Import ── */
+  function handleCsvImport(e){
+    const file=e.target.files[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const text=ev.target.result;
+        const lines=text.split(/\r?\n/).filter(l=>l.trim());
+        if(lines.length<2){showToast("CSV appears empty",false);return;}
+
+        // Parse a CSV row handling quoted fields
+        function parseRow(line){
+          const fields=[];let cur="",inQ=false;
+          for(let i=0;i<line.length;i++){
+            const c=line[i];
+            if(c==='"'){
+              if(inQ&&line[i+1]==='"'){cur+='"';i++;} // escaped quote
+              else inQ=!inQ;
+            } else if(c===","&&!inQ){fields.push(cur.trim());cur="";}
+            else{cur+=c;}
+          }
+          fields.push(cur.trim());
+          return fields;
+        }
+
+        const header=parseRow(lines[0]).map(h=>h.toLowerCase().replace(/"/g,"").trim());
+        const col=(...names)=>{
+          for(const name of names){
+            const i=header.findIndex(h=>h===name||h.includes(name));
+            if(i>=0)return i;
+          }
+          return -1;
+        };
+
+        const dateCol  = col("date");
+        const descCol  = col("description","desc","name","memo","narr");
+        const amtCol   = col("amount","amt");
+        const catCol   = col("category","cat");
+        const acctCol  = col("account","acct");
+        const xferCol  = col("transfer");
+
+        if(dateCol<0||descCol<0||amtCol<0){
+          showToast("Need at least Date, Description, Amount columns",false);
+          e.target.value="";return;
+        }
+
+        const imported=[];
+        for(let i=1;i<lines.length;i++){
+          const fields=parseRow(lines[i]);
+          if(fields.length<3)continue;
+
+          // Skip transfer rows — they'll be created by the transfer feature
+          if(xferCol>=0&&(fields[xferCol]||"").toLowerCase()==="yes")continue;
+
+          const rawDate =(fields[dateCol]||"").replace(/"/g,"").trim();
+          const rawDesc =(fields[descCol]||"").replace(/"/g,"").trim();
+          const rawAmt  =(fields[amtCol] ||"0").replace(/"/g,"").trim();
+          const rawCat  =catCol>=0?(fields[catCol]||"").replace(/"/g,"").trim():"";
+          const rawAcct =acctCol>=0?(fields[acctCol]||"").replace(/"/g,"").trim():"";
+
+          // Parse date: YYYY-MM-DD or MM/DD/YYYY or MM/DD/YY
+          let date=rawDate;
+          if(/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(date)){
+            const [m,d,y]=date.split("/");
+            date=`${y.length===2?"20"+y:y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+          }
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;
+
+          // Parse amount — handle regular minus, Unicode minus (−), parentheses (1,234.56)
+          let amtStr=rawAmt
+            .replace(/\u2212/g,"-")   // Unicode minus → regular minus
+            .replace(/[^\d.\-]/g,"");  // strip everything except digits, dot, minus
+          const amt=parseFloat(amtStr);
+          if(isNaN(amt))continue;
+          if(!rawDesc)continue;
+
+          // Match category against current categories (not just defaults)
+          const rawCatL=rawCat.toLowerCase();
+          const matchedCat=
+            categories.find(c=>c.label.toLowerCase()===rawCatL)||
+            categories.find(c=>rawCatL.includes(c.label.toLowerCase()))||
+            categories.find(c=>c.label.toLowerCase().includes(rawCatL)&&rawCatL.length>2);
+          const category=matchedCat?matchedCat.id:"misc";
+
+          // Match account by label
+          const rawAcctL=rawAcct.toLowerCase();
+          const matchedAcct=
+            accounts.find(a=>a.label.toLowerCase()===rawAcctL)||
+            accounts.find(a=>rawAcctL.includes(a.label.toLowerCase()));
+          const account=matchedAcct?matchedAcct.id:accounts[0]?.id||"chk1";
+
+          imported.push({id:nextId++,date,desc:rawDesc,amount:amt,category,account});
+        }
+
+        if(imported.length===0){showToast("No valid rows found in CSV",false);e.target.value="";return;}
+        setCsvModal({rows:imported,file:file.name});
+      }catch(err){
+        showToast("Error reading CSV: "+err.message,false);
+      }
+      e.target.value="";
+    };
+    reader.readAsText(file);
+  }
+
+  function confirmCsvImport(rows){
+    setTransactions(prev=>[...prev,...rows]);
+    showToast(`Imported ${rows.length} transaction${rows.length!==1?"s":""}`);
+    setCsvModal(false);
+  }
+
+  const totalAllBalance=accounts.reduce((s,a)=>s+acctBalance(a.id),0);
+  const expCats=categories.filter(c=>c.id!=="income");
+
+  /* ── Quick-Add handlers ── */
+  let nextQaId=Math.max(...(quickAdds.map(q=>parseInt(String(q.id).replace("qa",""))||0)),9)+1;
+  function handleSaveQa({desc,amount,type,cat,acct}){
+    if(qaModal==="new"){
+      setQuickAdds(prev=>[...prev,{id:"qa"+nextQaId++,desc,amount,type,cat,acct}]);
+    }else{
+      setQuickAdds(prev=>prev.map(q=>q.id===qaModal.id?{...q,desc,amount,type,cat,acct}:q));
+    }
+    setQaModal(false);
+  }
+  function handleDeleteQa(id){setQuickAdds(prev=>prev.filter(q=>q.id!==id));setQaModal(false);}
+
+  function clearAllFilters(){
+    setSearch("");setFilterMonth(0);setFilterAcct("all");setFilterCat("all");
+    setFilterType("all");setFilterDateFrom("");setFilterDateTo("");
+    setFilterAmtMin("");setFilterAmtMax("");setSortBy("date-desc");
+  }
+  const activeFilterCount=[
+    filterMonth!==0,filterAcct!=="all",filterCat!=="all",filterType!=="all",
+    !!filterDateFrom,!!filterDateTo,!!filterAmtMin,!!filterAmtMax,
+    sortBy!=="date-desc",!!search
+  ].filter(Boolean).length;
+
+  /* Log rendering (grouped transfers) */
+  const sorted=[...filtered].sort((a,b)=>{
+    if(sortBy==="date-desc")return new Date(b.date)-new Date(a.date)||b.id-a.id;
+    if(sortBy==="date-asc") return new Date(a.date)-new Date(b.date)||a.id-b.id;
+    if(sortBy==="amount-desc")return Math.abs(b.amount)-Math.abs(a.amount);
+    if(sortBy==="amount-asc") return Math.abs(a.amount)-Math.abs(b.amount);
+    return new Date(b.date)-new Date(a.date);
+  });
+  function renderLogRows(){
+    const seen=new Set(),rows=[];
+    for(const t of sorted){
+      if(t.isTransfer&&t.transferId){
+        if(seen.has(t.transferId))continue;
+        seen.add(t.transferId);
+        const leg1=transactions.find(x=>x.transferId===t.transferId&&x.amount<0);
+        const leg2=transactions.find(x=>x.transferId===t.transferId&&x.amount>0);
+        if(filterAcct!=="all"&&leg1?.account!==filterAcct&&leg2?.account!==filterAcct)continue;
+        if(search&&!t.desc.toLowerCase().includes(search.toLowerCase()))continue;
+        rows.push({type:"transfer",t,leg1,leg2,key:t.transferId});
+      }else{
+        rows.push({type:"tx",t,key:String(t.id)});
+      }
+    }
+    return rows;
+  }
+  const logRows=renderLogRows();
+
+  /* Nav items */
+  const navItems=[
+    ["dashboard","Overview"],["log","Transactions"],
+    ["scheduled","Scheduled"],["budget","Weekly Budget"],["cats","Categories"],
+  ];
+
+  const [menuOpen,setMenuOpen]=useState(false);
+
+  const tabItems=[
+    {v:"dashboard",icon:"◈",label:"Overview"},
+    {v:"log",       icon:"≡",label:"Transactions"},
+    {v:"scheduled", icon:"◷",label:"Scheduled"},
+    {v:"budget",    icon:"◉",label:"Budget"},
+    {v:"cats",      icon:"⊞",label:"Categories"},
+  ];
+
+  function goTo(v){setView(v);if(v!=="add")setEditId(null);setMenuOpen(false);}
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0a0f"}}>
+
+      {/* ── Top Bar ── */}
+      <div className="top-bar">
+        <span style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:800,letterSpacing:"-0.02em"}}><span style={{color:"#7c6fff"}}>$</span>LEDGER</span>
+        {/* Desktop nav — hidden on mobile via CSS */}
+        <nav className="desktop-nav" style={{display:"none",gap:1}}>
+          {tabItems.map(({v,label})=>(
+            <button key={v} onClick={()=>goTo(v)}
+              style={{background:view===v?"#1a1a28":"none",border:view===v?"1px solid #2a2a40":"1px solid transparent",color:view===v?"#e8e6f0":"#666",borderRadius:8,padding:"7px 12px",cursor:"pointer",fontFamily:"DM Mono",fontSize:11,transition:"all .2s"}}>
+              {label}
+            </button>
+          ))}
+        </nav>
+        {/* Right action buttons */}
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <input ref={csvFileRef} type="file" accept=".csv,text/csv" style={{display:"none"}} onChange={handleCsvImport}/>
+          {/* Desktop action buttons */}
+          <div className="hide-mobile" style={{display:"flex",gap:6}}>
+            {sheetUrl&&(
+              <button onClick={syncFromSheet} title={lastSync?"Last sync: "+lastSync.toLocaleTimeString():"Not synced yet"}
+                style={{background:syncStatus==="ok"?"#4ade8018":syncStatus==="error"?"#f8717118":syncStatus==="syncing"?"#7c6fff18":"#1a1a28",border:`1px solid ${syncStatus==="ok"?"#4ade8044":syncStatus==="error"?"#f8717144":syncStatus==="syncing"?"#7c6fff44":"#2a2a40"}`,color:syncStatus==="ok"?"#4ade80":syncStatus==="error"?"#f87171":syncStatus==="syncing"?"#7c6fff":"#888",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono",transition:"all .3s"}}>
+                {syncStatus==="syncing"?"⟳":"✓"}
+              </button>
+            )}
+            <button onClick={()=>{setSheetUrlInput(sheetUrl);setSettingsOpen(true);}} style={{background:sheetUrl?"#7c6fff18":"#1a1a28",border:sheetUrl?"1px solid #7c6fff44":"1px solid #2a2a40",color:sheetUrl?"#a78bfa":"#888",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono"}} title="Google Sheets settings">
+              {sheetUrl?"🔗 Sheets":"☁️ Sheets"}
+            </button>
+            <button onClick={()=>csvFileRef.current&&csvFileRef.current.click()} style={{background:"#34d39918",border:"1px solid #34d39944",color:"#34d399",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono"}}>↑ CSV</button>
+            <button onClick={()=>setXferModal(true)} style={{background:"#f59e0b18",border:"1px solid #f59e0b44",color:"#f59e0b",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono"}}>⇄</button>
+            <button onClick={handleExport} style={{background:"#1a1a28",border:"1px solid #2a2a40",color:"#888",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono"}}>↓</button>
+            <button onClick={handleReset} style={{background:"#1a1a28",border:"1px solid #2a2a40",color:"#888",borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono"}}>Reset</button>
+          </div>
+          {/* Mobile ⋯ menu button */}
+          <button onClick={()=>setMenuOpen(p=>!p)}
+            style={{background:menuOpen?"#1a1a28":"none",border:menuOpen?"1px solid #2a2a40":"1px solid transparent",color:"#888",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:18,lineHeight:1,display:"flex",alignItems:"center"}}
+            className="hide-desktop">⋯</button>
+        </div>
+      </div>
+
+      {/* ── Mobile slide-down menu ── */}
+      {menuOpen&&(
+        <div style={{position:"fixed",top:52,left:0,right:0,background:"#0d0d18",border:"1px solid #1e1e30",borderTop:"none",zIndex:99,padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
+          <button className="toolbar-btn" onClick={()=>{csvFileRef.current&&csvFileRef.current.click();setMenuOpen(false);}}>
+            <span style={{color:"#34d399"}}>↑</span> Import CSV
+          </button>
+          <button className="toolbar-btn" onClick={()=>{setXferModal(true);setMenuOpen(false);}}>
+            <span style={{color:"#f59e0b"}}>⇄</span> Transfer
+          </button>
+          <button className="toolbar-btn" onClick={()=>{handleExport();setMenuOpen(false);}}>
+            <span>↓</span> Export CSV
+          </button>
+          <button className="toolbar-btn" onClick={()=>{handleReset();setMenuOpen(false);}}>
+            <span style={{color:"#f87171"}}>↺</span> Reset All Data
+          </button>
+          <div style={{height:1,background:"#1e1e30",margin:"4px 0"}}/>
+          <button className="toolbar-btn" onClick={()=>{setSheetUrlInput(sheetUrl);setSettingsOpen(true);setMenuOpen(false);}}>
+            <span>{sheetUrl?"🔗":"☁️"}</span> {sheetUrl?"Sheets (connected)":"Connect Google Sheets"}
+            {sheetUrl&&syncStatus==="ok"&&<span style={{marginLeft:"auto",fontSize:10,color:"#4ade80"}}>✓</span>}
+            {sheetUrl&&syncStatus==="error"&&<span style={{marginLeft:"auto",fontSize:10,color:"#f87171"}}>✗</span>}
+          </button>
+          {sheetUrl&&<button className="toolbar-btn" onClick={()=>{syncFromSheet();setMenuOpen(false);}}><span style={{color:"#7c6fff"}}>⟳</span> Pull latest from Sheets</button>}
+        </div>
+      )}
+      {menuOpen&&<div style={{position:"fixed",inset:0,zIndex:98}} onClick={()=>setMenuOpen(false)}/>}
+
+      <div className="page-content">
+
+        {/* ══ DASHBOARD ══════════════════════════════════════════════ */}
+        {view==="dashboard"&&(
+          <div>
+            <div style={{marginBottom:24}}>
+              <div style={{fontSize:11,color:"#555",letterSpacing:"0.1em",marginBottom:12,textTransform:"uppercase"}}>Account Balances</div>
+              <div className="grid-3" style={{marginBottom:10}}>
+                {accounts.map(a=>{
+                  const bal=acctBalance(a.id);
+                  const acctTx=transactions.filter(t=>t.account===a.id&&!t.isTransfer);
+                  const inc=acctTx.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0);
+                  const exp=acctTx.filter(t=>t.amount<0).reduce((s,t)=>s+t.amount,0);
+                  const xIn=transactions.filter(t=>t.account===a.id&&t.isTransfer&&t.amount>0).reduce((s,t)=>s+t.amount,0);
+                  const xOut=transactions.filter(t=>t.account===a.id&&t.isTransfer&&t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+                  return(
+                    <div key={a.id} style={{background:"#11111c",border:`1px solid ${a.color}33`,borderRadius:14,padding:"16px 18px",position:"relative",overflow:"hidden"}}>
+                      <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:`linear-gradient(90deg,${a.color},${a.color}44)`}}/>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                        <div><div style={{fontSize:10,color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:3}}>{a.type}</div><div style={{fontSize:12,color:"#ccc",fontWeight:500}}>{a.label}</div></div>
+                        <button onClick={()=>setAcctModal(a)} style={{background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:11,fontFamily:"DM Mono",padding:"2px 5px",borderRadius:4}} onMouseOver={e=>e.currentTarget.style.color="#aaa"} onMouseOut={e=>e.currentTarget.style.color="#444"}>edit</button>
+                      </div>
+                      <div style={{fontSize:24,fontWeight:700,color:bal>=0?a.color:"#f87171",fontFamily:"'Syne',sans-serif",marginBottom:10,letterSpacing:"-0.02em"}}>{fmt(bal)}</div>
+                      <div style={{display:"flex",gap:10,fontSize:11,flexWrap:"wrap"}}>
+                        <span style={{color:"#555"}}>In <span style={{color:"#4ade80"}}>{fmt(inc)}</span></span>
+                        <span style={{color:"#555"}}>Out <span style={{color:"#f87171"}}>{fmt(exp)}</span></span>
+                        {(xIn>0||xOut>0)&&<span style={{color:"#555"}}>Xfer <span style={{color:"#f59e0b"}}>{xIn>0?`+${fmt(xIn)}`:""}{xOut>0?` −${fmt(xOut)}`:""}</span></span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"9px 14px",background:"#11111c",borderRadius:10,border:"1px solid #1e1e30"}}>
+                <button onClick={()=>setAcctModal({label:"",color:PALETTE[9],startBalance:0,type:"checking",icon:"🏦"})}
+                  style={{background:"none",border:"none",color:"#7c6fff",cursor:"pointer",fontFamily:"DM Mono",fontSize:12,padding:0,display:"flex",alignItems:"center",gap:5}}>
+                  + Add Account
+                </button>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:11,color:"#555",letterSpacing:"0.08em",textTransform:"uppercase"}}>Total</span>
+                  <span style={{fontSize:15,fontWeight:600,fontFamily:"'Syne',sans-serif",color:totalAllBalance>=0?"#e8e6f0":"#f87171"}}>{fmt(totalAllBalance)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap",alignItems:"center"}}>
+              <div style={{display:"flex",gap:3,overflowX:"auto",flex:1}}>
+                <button className={`seg-btn ${filterMonth===0?"active":""}`} onClick={()=>setFilterMonth(0)}>All</button>
+                {MONTHS.map((m,i)=><button key={m} className={`seg-btn ${filterMonth===i+1?"active":""}`} onClick={()=>setFilterMonth(i+1)}>{m}</button>)}
+              </div>
+              <select className="input-field" style={{width:145,flexShrink:0}} value={filterAcct} onChange={e=>setFilterAcct(e.target.value)}>
+                <option value="all">All accounts</option>
+                {accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+              </select>
+            </div>
+
+            <div className="grid-3" style={{gap:12,marginBottom:20}}>
+              {[{label:"Income",value:totalIncome,color:"#4ade80"},{label:"Expenses",value:totalExpenses,color:"#f87171"},{label:"Net",value:net,color:net>=0?"#4ade80":"#f87171"}].map(k=>(
+                <div key={k.label} className="card"><div style={{fontSize:11,color:"#555",letterSpacing:"0.1em",marginBottom:7,textTransform:"uppercase"}}>{k.label}</div><div style={{fontSize:20,fontWeight:600,color:k.color,fontFamily:"'Syne',sans-serif"}}>{fmt(k.value)}</div></div>
+              ))}
+            </div>
+
+            {monthlyData.length>0&&(
+              <div className="card" style={{marginBottom:20}}>
+                <div style={{fontSize:11,color:"#555",letterSpacing:"0.1em",marginBottom:18,textTransform:"uppercase"}}>Monthly Overview</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:8,height:90}}>
+                  {monthlyData.map(d=>(
+                    <div key={d.m} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                      <div style={{width:"100%",display:"flex",gap:2,alignItems:"flex-end",height:72}}>
+                        <div title={`Inc $${d.inc.toFixed(0)}`} style={{flex:1,background:"#4ade8022",borderTop:"2px solid #4ade80",height:`${(d.inc/maxBar)*72}px`,borderRadius:"3px 3px 0 0",minHeight:2}}/>
+                        <div title={`Exp $${d.exp.toFixed(0)}`} style={{flex:1,background:"#f8717122",borderTop:"2px solid #f87171",height:`${(d.exp/maxBar)*72}px`,borderRadius:"3px 3px 0 0",minHeight:2}}/>
+                      </div>
+                      <div style={{fontSize:9,color:"#555"}}>{d.m}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {catTotals.length>0&&(
+              <div className="card">
+                <div style={{fontSize:11,color:"#555",letterSpacing:"0.1em",marginBottom:18,textTransform:"uppercase"}}>Spending by Category</div>
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  {[...catTotals].sort((a,b)=>b.total-a.total).map(c=>(
+                    <div key={c.id}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,fontSize:12}}>
+                        <span style={{color:"#aaa"}}>{c.icon} {c.label}</span><span style={{color:c.color}}>{fmt(-c.total)}</span>
+                      </div>
+                      <div style={{height:3,background:"#1e1e30",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${(c.total/maxCat)*100}%`,background:c.color,borderRadius:2}}/></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ LOG ════════════════════════════════════════════════════ */}
+        {view==="log"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800}}>Transactions</div>
+              <button className="btn-primary" style={{fontSize:12,padding:"9px 14px"}} onClick={()=>{setEditId(null);setForm({date:today(),desc:"",amount:"",category:"misc",type:"expense",account:"chk1"});setView("add");}}>+ Add</button>
+            </div>
+
+            {/* Search + filter toggle row */}
+            <div style={{display:"flex",gap:8,marginBottom:8}}>
+              <input className="input-field" style={{flex:1}} placeholder="Search descriptions…" value={search} onChange={e=>setSearch(e.target.value)}/>
+              <button onClick={()=>setShowAdvanced(p=>!p)}
+                style={{background:showAdvanced||activeFilterCount>0?"#7c6fff22":"#1a1a28",border:`1px solid ${showAdvanced||activeFilterCount>0?"#7c6fff44":"#2a2a40"}`,color:activeFilterCount>0?"#a78bfa":"#888",borderRadius:10,padding:"0 14px",cursor:"pointer",fontFamily:"DM Mono",fontSize:12,flexShrink:0,display:"flex",alignItems:"center",gap:6,touchAction:"manipulation"}}>
+                ⚙ Filters{activeFilterCount>0&&<span style={{background:"#7c6fff",color:"#fff",borderRadius:999,padding:"1px 6px",fontSize:10}}>{activeFilterCount}</span>}
+              </button>
+            </div>
+
+            {/* Quick type chips */}
+            <div style={{display:"flex",gap:6,marginBottom:8,overflowX:"auto"}}>
+              {[["all","All"],["income","↑ Income"],["expense","↓ Expense"],["transfer","⇄ Transfer"]].map(([val,lbl])=>(
+                <button key={val} className={`seg-btn ${filterType===val?"active":""}`}
+                  style={{color:filterType===val?(val==="income"?"#4ade80":val==="expense"?"#f87171":val==="transfer"?"#f59e0b":"#e8e6f0"):"#555",
+                          borderColor:filterType===val?(val==="income"?"#4ade8044":val==="expense"?"#f8717144":val==="transfer"?"#f59e0b44":"#2a2a40"):"transparent"}}
+                  onClick={()=>setFilterType(val)}>{lbl}</button>
+              ))}
+            </div>
+
+            {/* Advanced filters panel */}
+            {showAdvanced&&(
+              <div style={{background:"#0d0d18",border:"1px solid #1e1e30",borderRadius:12,padding:"14px",marginBottom:10,display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:120}}>
+                    <label className="lbl">Month</label>
+                    <select className="input-field" value={filterMonth} onChange={e=>setFilterMonth(Number(e.target.value))}>
+                      <option value={0}>All months</option>{MONTHS.map((m,i)=><option key={m} value={i+1}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div style={{flex:1,minWidth:120}}>
+                    <label className="lbl">Category</label>
+                    <select className="input-field" value={filterCat} onChange={e=>setFilterCat(e.target.value)}>
+                      <option value="all">All</option>{categories.map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{flex:1,minWidth:120}}>
+                    <label className="lbl">Account</label>
+                    <select className="input-field" value={filterAcct} onChange={e=>setFilterAcct(e.target.value)}>
+                      <option value="all">All</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{flex:1,minWidth:120}}>
+                    <label className="lbl">Sort by</label>
+                    <select className="input-field" value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+                      <option value="date-desc">Date (newest)</option>
+                      <option value="date-asc">Date (oldest)</option>
+                      <option value="amount-desc">Amount (largest)</option>
+                      <option value="amount-asc">Amount (smallest)</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:120}}>
+                    <label className="lbl">From date</label>
+                    <input type="date" className="input-field" value={filterDateFrom} onChange={e=>setFilterDateFrom(e.target.value)}/>
+                  </div>
+                  <div style={{flex:1,minWidth:120}}>
+                    <label className="lbl">To date</label>
+                    <input type="date" className="input-field" value={filterDateTo} onChange={e=>setFilterDateTo(e.target.value)}/>
+                  </div>
+                  <div style={{flex:1,minWidth:100}}>
+                    <label className="lbl">Min $</label>
+                    <input type="number" className="input-field" placeholder="0.00" min="0" step="0.01" value={filterAmtMin} onChange={e=>setFilterAmtMin(e.target.value)}/>
+                  </div>
+                  <div style={{flex:1,minWidth:100}}>
+                    <label className="lbl">Max $</label>
+                    <input type="number" className="input-field" placeholder="any" min="0" step="0.01" value={filterAmtMax} onChange={e=>setFilterAmtMax(e.target.value)}/>
+                  </div>
+                </div>
+                {activeFilterCount>0&&(
+                  <button onClick={clearAllFilters} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontFamily:"DM Mono",fontSize:12,textAlign:"left",padding:0}}>
+                    ✕ Clear all filters ({activeFilterCount} active)
+                  </button>
+                )}
+              </div>
+            )}
+            <div style={{display:"flex",gap:16,marginBottom:16,padding:"10px 14px",background:"#11111c",borderRadius:10,border:"1px solid #1e1e30",fontSize:12,flexWrap:"wrap"}}>
+              <span><span style={{color:"#555"}}>Showing </span><span style={{color:"#e8e6f0"}}>{logRows.length}</span></span>
+              <span><span style={{color:"#555"}}>In </span><span style={{color:"#4ade80"}}>{fmt(totalIncome)}</span></span>
+              <span><span style={{color:"#555"}}>Out </span><span style={{color:"#f87171"}}>{fmt(totalExpenses)}</span></span>
+              <span style={{marginLeft:"auto"}}><span style={{color:"#555"}}>Net </span><span style={{color:net>=0?"#4ade80":"#f87171"}}>{fmt(net)}</span></span>
+            </div>
+            {logRows.length===0?<div style={{textAlign:"center",color:"#555",padding:"50px 0",fontSize:13}}>No transactions found</div>:
+              <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                {logRows.map(row=>{
+                  if(row.type==="transfer"){
+                    const {leg1,leg2,t}=row;
+                    const fromA=acctById(leg1?.account),toA=acctById(leg2?.account);
+                    return(
+                      <div key={row.key} className="row-hover" style={{display:"flex",alignItems:"center",padding:"11px 13px",borderRadius:10,background:"#11111c",border:"1px solid #f59e0b22",gap:10,transition:"background .15s"}}>
+                        <div style={{width:26,height:26,borderRadius:7,background:"#f59e0b18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>⇄</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,color:"#ddd",marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.desc}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,color:"#555",flexWrap:"wrap"}}>
+                            <span>{t.date}</span>
+                            <span className="acct-chip" style={{background:`${fromA.color}18`,borderColor:`${fromA.color}33`,color:fromA.color}}>{fromA.label}</span>
+                            <span style={{color:"#f59e0b"}}>→</span>
+                            <span className="acct-chip" style={{background:`${toA.color}18`,borderColor:`${toA.color}33`,color:toA.color}}>{toA.label}</span>
+                          </div>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:500,color:"#f59e0b",flexShrink:0}}>{fmt(Math.abs(leg1?.amount||0))}</div>
+                        <button onClick={()=>handleDelete(t.id)} className="btn-sm">del</button>
+                      </div>
+                    );
+                  }
+                  const {t}=row;const acct=acctById(t.account||"chk1");
+                  return(
+                    <div key={row.key} className="row-hover" style={{display:"flex",alignItems:"center",padding:"11px 13px",borderRadius:10,background:"#11111c",border:"1px solid #1e1e30",gap:10,transition:"background .15s"}}>
+                      <div style={{width:26,height:26,borderRadius:7,background:`${catColor(t.category)}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}>{catIcon(t.category)}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,color:"#ddd",marginBottom:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                          {t.desc}{t.scheduledId&&<span style={{marginLeft:6,fontSize:9,color:"#7c6fff",background:"#7c6fff18",padding:"1px 6px",borderRadius:999}}>auto</span>}
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:7,fontSize:10,color:"#555",flexWrap:"wrap"}}>
+                          <span>{t.date}</span>
+                          <span style={{color:catColor(t.category)}}>{catLabel(t.category)}</span>
+                          <span className="acct-chip" style={{background:`${acct.color}18`,borderColor:`${acct.color}33`,color:acct.color}}>{acct.label}</span>
+                        </div>
+                      </div>
+                      <div style={{fontSize:14,fontWeight:500,color:t.amount>=0?"#4ade80":"#f87171",flexShrink:0}}>{fmt(t.amount)}</div>
+                      <div style={{display:"flex",gap:5,flexShrink:0}}>
+                        <button onClick={()=>handleEdit(t)} className="btn-sm">edit</button>
+                        <button onClick={()=>handleDelete(t.id)} className="btn-sm">del</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            }
+          </div>
+        )}
+
+        {/* ══ ADD / EDIT ═════════════════════════════════════════════ */}
+        {view==="add"&&(
+          <div style={{maxWidth:480,margin:"0 auto"}}>
+            <div className="card">
+              <div style={{fontFamily:"'Syne',sans-serif",fontSize:19,fontWeight:800,marginBottom:20}}>{editId!==null?"Edit Transaction":"New Transaction"}</div>
+              <div style={{display:"flex",gap:0,marginBottom:20,background:"#1a1a28",borderRadius:10,padding:4}}>
+                {["expense","income"].map(t=>(
+                  <button key={t} onClick={()=>setForm(f=>({...f,type:t,category:t==="income"?"income":"misc"}))}
+                    style={{flex:1,background:form.type===t?(t==="income"?"#4ade8022":"#f8717122"):"none",border:form.type===t?`1px solid ${t==="income"?"#4ade8044":"#f8717144"}`:"1px solid transparent",color:form.type===t?(t==="income"?"#4ade80":"#f87171"):"#555",borderRadius:8,padding:"8px 0",cursor:"pointer",fontFamily:"DM Mono",fontSize:12,transition:"all .15s"}}>
+                    {t==="income"?"↑ Income":"↓ Expense"}
+                  </button>
+                ))}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <div><label className="lbl">Date</label><input type="date" className="input-field" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/></div>
+                <div><label className="lbl">Description</label><input className="input-field" placeholder="e.g. AT&T, Rent…" value={form.desc} onChange={e=>setForm(f=>({...f,desc:e.target.value}))}/></div>
+                <div><label className="lbl">Amount</label><input className="input-field" type="number" min="0" step="0.01" placeholder="0.00" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))}/></div>
+                <div>
+                  <label className="lbl">Account</label>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7}}>
+                    {accounts.map(a=>(
+                      <button key={a.id} onClick={()=>setForm(f=>({...f,account:a.id}))}
+                        style={{padding:"10px 6px",borderRadius:10,border:`1px solid ${form.account===a.id?a.color+"88":"#2a2a40"}`,background:form.account===a.id?`${a.color}18`:"#1a1a28",color:form.account===a.id?a.color:"#666",cursor:"pointer",fontFamily:"DM Mono",fontSize:11,transition:"all .15s",textAlign:"center",touchAction:"manipulation"}}>
+                        <div style={{fontSize:18,marginBottom:3}}>{a.icon}</div><div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="lbl">Category {form.type!=="income"&&<span style={{color:"#555",fontWeight:400,textTransform:"none",fontSize:10}}>— or <button onClick={()=>setCatModal("new")} style={{background:"none",border:"none",color:"#7c6fff",cursor:"pointer",fontFamily:"DM Mono",fontSize:10,padding:0,textDecoration:"underline"}}>create new</button></span>}</label>
+                  <div style={{display:"flex",gap:7}}>
+                    <select className="input-field" value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}>
+                      {(form.type==="income"?categories.filter(c=>c.id==="income"):expCats).map(c=><option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
+                    </select>
+                    {form.type!=="income"&&<button onClick={()=>setCatModal("new")} style={{background:"#1a1a28",border:"1px solid #7c6fff55",color:"#7c6fff",borderRadius:10,padding:"0 14px",cursor:"pointer",fontSize:18,flexShrink:0,lineHeight:1}} onMouseOver={e=>{e.currentTarget.style.background="#7c6fff22";}} onMouseOut={e=>{e.currentTarget.style.background="#1a1a28";}}>+</button>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:6}}>
+                  <button className="btn-primary" style={{flex:1}} onClick={handleAdd}>{editId!==null?"Save Changes":"Add Transaction"}</button>
+                  {editId!==null&&<button onClick={()=>{setEditId(null);setForm({date:today(),desc:"",amount:"",category:"misc",type:"expense",account:"chk1"});setView("log");}} style={{background:"#1e1e30",border:"1px solid #2a2a40",color:"#888",borderRadius:10,padding:"11px 16px",cursor:"pointer",fontFamily:"DM Mono",fontSize:13}}>Cancel</button>}
+                </div>
+              </div>
+            </div>
+            <div onClick={()=>setXferModal(true)} style={{marginTop:10,padding:"12px 16px",background:"#f59e0b0d",border:"1px solid #f59e0b33",borderRadius:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10}} onMouseOver={e=>e.currentTarget.style.background="#f59e0b18"} onMouseOut={e=>e.currentTarget.style.background="#f59e0b0d"}>
+              <span style={{fontSize:18}}>⇄</span><div><div style={{fontSize:12,color:"#f59e0b",fontWeight:500}}>Account Transfer</div><div style={{fontSize:10,color:"#555",marginTop:1}}>Move money between accounts</div></div>
+              <span style={{marginLeft:"auto",color:"#f59e0b"}}>→</span>
+            </div>
+            <div style={{marginTop:16}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <div style={{fontSize:11,color:"#555",letterSpacing:"0.1em",textTransform:"uppercase"}}>Quick-Add</div>
+                <button onClick={()=>setQaModal("new")} style={{background:"#7c6fff18",border:"1px solid #7c6fff44",color:"#a78bfa",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono"}}>+ New</button>
+              </div>
+              {quickAdds.length===0&&(
+                <div style={{fontSize:12,color:"#555",padding:"10px 0"}}>No quick-adds yet — tap + New to create one</div>
+              )}
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {quickAdds.map(q=>{
+                  const acct=acctById(q.acct);
+                  const isInc=q.type==="income";
+                  return(
+                    <div key={q.id} style={{display:"flex",alignItems:"stretch",borderRadius:8,overflow:"hidden",border:`1px solid ${isInc?"#4ade8033":"#2a2a40"}`}}>
+                      <button
+                        onClick={()=>setForm(f=>({...f,desc:q.desc,amount:q.amount,category:q.cat,type:q.type,account:q.acct}))}
+                        style={{background:isInc?"#4ade8010":"#1a1a28",color:isInc?"#4ade80":"#ccc",padding:"7px 12px",cursor:"pointer",fontSize:12,fontFamily:"DM Mono",border:"none",textAlign:"left"}}>
+                        <div style={{fontWeight:500}}>{q.desc}</div>
+                        <div style={{fontSize:10,color:isInc?"#4ade8088":"#555",marginTop:1}}>{isInc?"+":" −"}{q.amount} · {acct.label}</div>
+                      </button>
+                      <button
+                        onClick={()=>setQaModal(q)}
+                        style={{background:isInc?"#4ade8008":"#16161e",color:"#444",padding:"0 8px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono",border:"none",borderLeft:`1px solid ${isInc?"#4ade8022":"#2a2a40"}`,touchAction:"manipulation"}}
+                        title="Edit">✎</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ SCHEDULED PAYMENTS ═════════════════════════════════════ */}
+        {view==="scheduled"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,gap:12}}>
+              <div>
+                <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800}}>Scheduled</div>
+                <div style={{fontSize:11,color:"#555",marginTop:4}}>{scheduled.filter(s=>s.active).length} active payments</div>
+              </div>
+              <button className="btn-primary" style={{flexShrink:0,padding:"10px 16px",fontSize:13}} onClick={()=>setSchedModal("new")}>+ Add</button>
+            </div>
+
+            {/* Summary */}
+            <div className="grid-2" style={{marginBottom:20}}>
+              <div className="card">
+                <div style={{fontSize:11,color:"#555",letterSpacing:"0.1em",marginBottom:7,textTransform:"uppercase"}}>Monthly Expenses</div>
+                <div style={{fontSize:20,fontWeight:600,color:"#f87171",fontFamily:"'Syne',sans-serif"}}>
+                  −{fmt(scheduled.filter(s=>s.active&&!s.isIncome&&(s.recurrenceType||"monthly")==="monthly").reduce((s,p)=>s+p.amount,0))}
+                </div>
+                <div style={{fontSize:10,color:"#555",marginTop:4}}>
+                  {scheduled.filter(s=>s.active&&s.isIncome&&(s.recurrenceType||"monthly")==="monthly").length>0&&(
+                    <span style={{color:"#4ade80"}}>+{fmt(scheduled.filter(s=>s.active&&s.isIncome&&(s.recurrenceType||"monthly")==="monthly").reduce((s,p)=>s+p.amount,0))} income · </span>
+                  )}
+                  {scheduled.filter(s=>s.active&&!s.isIncome&&(s.recurrenceType||"monthly")==="monthly").length} expenses
+                </div>
+              </div>
+              <div className="card">
+                <div style={{fontSize:11,color:"#555",letterSpacing:"0.1em",marginBottom:7,textTransform:"uppercase"}}>Weekly Expenses</div>
+                <div style={{fontSize:20,fontWeight:600,color:"#34d399",fontFamily:"'Syne',sans-serif"}}>
+                  −{fmt(scheduled.filter(s=>s.active&&!s.isIncome&&s.recurrenceType==="weekly").reduce((s,p)=>s+p.amount,0))}
+                </div>
+                <div style={{fontSize:10,color:"#555",marginTop:4}}>
+                  {scheduled.filter(s=>s.active&&s.isIncome&&s.recurrenceType==="weekly").length>0&&(
+                    <span style={{color:"#4ade80"}}>+{fmt(scheduled.filter(s=>s.active&&s.isIncome&&s.recurrenceType==="weekly").reduce((s,p)=>s+p.amount,0))} income · </span>
+                  )}
+                  {scheduled.filter(s=>s.active&&!s.isIncome&&s.recurrenceType==="weekly").length} expenses
+                </div>
+              </div>
+            </div>
+
+            {/* Upcoming soon */}
+            {(()=>{
+              const now=new Date();
+              const todayDay=now.getDate();
+              const todayDow=now.getDay();
+              const upcomingMonthly=scheduled.filter(s=>s.active&&(s.recurrenceType||"monthly")==="monthly"&&(s.dayOfMonth||1)>=todayDay)
+                .map(s=>({...s,label:`${ordinal(s.dayOfMonth)} of month`}))
+                .sort((a,b)=>(a.dayOfMonth||1)-(b.dayOfMonth||1));
+              const upcomingWeekly=[];
+              for(let i=0;i<7;i++){
+                const d=new Date(now);d.setDate(now.getDate()+i);
+                scheduled.filter(s=>s.active&&(s.recurrenceType||"monthly")==="weekly"&&s.dayOfWeek===d.getDay()).forEach(s=>{
+                  upcomingWeekly.push({...s,label:`${WEEKDAYS[s.dayOfWeek||0]} (${i===0?"today":i===1?"tomorrow":fmtDate(d)})`});
+                });
+              }
+              const upcoming=[...upcomingMonthly.slice(0,3),...upcomingWeekly.slice(0,3)];
+              if(!upcoming.length)return null;
+              return(
+                <div style={{marginBottom:16,padding:"12px 14px",background:"#0f0f1a",borderRadius:12,border:"1px solid #7c6fff22"}}>
+                  <div style={{fontSize:11,color:"#7c6fff",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10}}>Upcoming</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                    {upcoming.map((s,i)=>{
+                      const acct=acctById(s.account);
+                      const isWeekly=(s.recurrenceType||"monthly")==="weekly";
+                      const typeColor=s.isIncome?"#4ade80":isWeekly?"#34d399":"#a78bfa";
+                      return(
+                        <div key={s.id+"_"+i} style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:9,color:typeColor,background:`${typeColor}18`,padding:"2px 7px",borderRadius:999,flexShrink:0,whiteSpace:"nowrap"}}>{s.isIncome?"↑":isWeekly?"wk":"mo"}</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,color:"#ccc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.desc}</div>
+                            <div style={{fontSize:10,color:"#555"}}>{s.label}</div>
+                          </div>
+                          <div style={{textAlign:"right",flexShrink:0}}>
+                            <div style={{fontSize:12,fontWeight:600,color:s.isIncome?"#4ade80":"#f87171"}}>{s.isIncome?"+":"−"}{fmt(s.amount)}</div>
+                            <div style={{fontSize:9,color:acct.color}}>{acct.label}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {[...scheduled].sort((a,b)=>{
+                // Sort: income first, then expenses; within each group monthly before weekly
+                if(!!a.isIncome!==!!b.isIncome) return a.isIncome?-1:1;
+                const aType=a.recurrenceType||"monthly";
+                const bType=b.recurrenceType||"monthly";
+                if(aType!==bType) return aType==="monthly"?-1:1;
+                if(aType==="monthly") return (a.dayOfMonth||1)-(b.dayOfMonth||1);
+                return (a.dayOfWeek||0)-(b.dayOfWeek||0);
+              }).map(s=>{
+                const acct=acctById(s.account);
+                const cat=categories.find(c=>c.id===s.category)||{color:"#94a3b8",icon:"•"};
+                const appliedToday=transactions.some(t=>t.scheduledId===s.id&&t.date===today());
+                const recType=s.recurrenceType||"monthly";
+                const isWeekly=recType==="weekly";
+                const badgeColor=s.active?(s.isIncome?"#4ade80":isWeekly?"#34d399":"#7c6fff"):"#555";
+                const badgeBg=s.active?(s.isIncome?"#4ade8018":isWeekly?"#34d39918":"#7c6fff18"):"#1a1a28";
+                const badgeBorder=s.active?(s.isIncome?"#4ade8044":isWeekly?"#34d39944":"#7c6fff44"):"#2a2a40";
+                const schedLabel=isWeekly?`Every ${WEEKDAYS[s.dayOfWeek||0]}`:`${ordinal(s.dayOfMonth||1)} of month`;
+                return(
+                  <div key={s.id} style={{background:"#11111c",border:`1px solid ${s.active?"#1e1e30":"#16161e"}`,borderRadius:12,padding:"13px 14px",opacity:s.active?1:0.5,transition:"opacity .2s"}}>
+                    {/* Top row: badge + desc + amount */}
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                      <div style={{width:40,height:40,borderRadius:10,background:badgeBg,border:`1px solid ${badgeBorder}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontWeight:700,color:badgeColor,flexShrink:0,textAlign:"center",lineHeight:1.1}}>
+                        <span style={{fontSize:isWeekly?8:12}}>{isWeekly?(WEEKDAYS[s.dayOfWeek||0]||"").slice(0,3):String(s.dayOfMonth||1)}</span>
+                        <span style={{fontSize:7,opacity:0.7}}>{isWeekly?"wkly":"th"}</span>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,color:"#e8e6f0",fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.desc}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
+                          <span style={{fontSize:10,color:badgeColor,background:badgeBg,padding:"2px 7px",borderRadius:999}}>
+                            {s.isIncome?"↑ Income · ":""}{schedLabel}
+                          </span>
+                          <span style={{fontSize:10,color:cat.color}}>{cat.icon} {catLabel(s.category)}</span>
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <div style={{fontSize:15,fontWeight:700,color:s.isIncome?"#4ade80":"#f87171"}}>{s.isIncome?"+":"−"}{fmt(s.amount)}</div>
+                        <div style={{fontSize:10,color:acct.color,marginTop:2}}>{acct.label}</div>
+                      </div>
+                    </div>
+                    {/* Bottom row: status chips + action buttons */}
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      {appliedToday&&<span style={{fontSize:9,color:"#4ade80",background:"#4ade8018",border:"1px solid #4ade8033",padding:"2px 7px",borderRadius:999}}>✓ applied today</span>}
+                      {!s.active&&<span style={{fontSize:9,color:"#f59e0b",background:"#f59e0b18",padding:"2px 7px",borderRadius:999}}>paused</span>}
+                      <div style={{marginLeft:"auto",display:"flex",gap:5}}>
+                        {!appliedToday&&s.active&&(
+                          <button onClick={()=>applySchedNow(s)} className="btn-sm" style={{color:"#7c6fff",borderColor:"#7c6fff44",fontSize:11,padding:"5px 10px"}}>Apply</button>
+                        )}
+                        <button onClick={()=>setSchedModal(s)} className="btn-sm" style={{fontSize:11,padding:"5px 10px"}}>Edit</button>
+                        <button onClick={()=>toggleSched(s.id)} className="btn-sm" style={{color:s.active?"#f59e0b":"#4ade80",fontSize:11,padding:"5px 10px"}}>{s.active?"Pause":"Resume"}</button>
+                        <button onClick={()=>deleteSched(s.id)} className="btn-sm" style={{color:"#f87171",fontSize:11,padding:"5px 10px"}}>Del</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {scheduled.length===0&&<div style={{textAlign:"center",color:"#555",padding:"50px 0",fontSize:13}}>No scheduled payments yet</div>}
+          </div>
+        )}
+
+        {/* ══ WEEKLY BUDGET ══════════════════════════════════════════ */}
+        {view==="budget"&&(
+          <div>
+            {/* Header */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:10}}>
+              <div>
+                <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800}}>Weekly Budget</div>
+                <div style={{fontSize:11,color:"#7c6fff",marginTop:5,letterSpacing:"0.04em"}}>{fmtDate(weekStart)} — {fmtDate(weekEnd)}</div>
+                <div style={{fontSize:10,color:"#555",marginTop:3}}>Fri → Thu · {weekSchedBills.length} bill{weekSchedBills.length!==1?"s":""} due this week</div>
+              </div>
+              <button onClick={resetWeek} style={{background:"#1e1e30",border:"1px solid #2a2a40",color:"#888",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:11,fontFamily:"DM Mono",flexShrink:0,touchAction:"manipulation"}}>Reset</button>
+            </div>
+
+            {/* Account selector */}
+            <div style={{display:"flex",gap:7,marginBottom:16,overflowX:"auto"}}>
+              <button className={`seg-btn ${wbAccount==="all"?"active":""}`} onClick={()=>setWbAccount("all")} style={{flexShrink:0}}>All Accounts</button>
+              {accounts.map(a=>(
+                <button key={a.id} className={`seg-btn ${wbAccount===a.id?"active":""}`}
+                  onClick={()=>setWbAccount(a.id)}
+                  style={{flexShrink:0,color:wbAccount===a.id?a.color:"#555",borderColor:wbAccount===a.id?`${a.color}66`:"transparent",background:wbAccount===a.id?`${a.color}12`:"none"}}>
+                  {a.icon} {a.label}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Overspend alerts ── */}
+            {(thisWeekOver||nextWeekOver)&&(
+              <div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:8}}>
+                {thisWeekOver&&(
+                  <div style={{padding:"12px 14px",background:"#f8717112",border:"1px solid #f8717144",borderRadius:10,display:"flex",gap:10,alignItems:"flex-start"}}>
+                    <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
+                    <div>
+                      <div style={{fontSize:12,color:"#f87171",fontWeight:600,marginBottom:2}}>Bills exceed income this week!</div>
+                      <div style={{fontSize:11,color:"#f8717199"}}>Bills {fmt(wbBillTotal)} vs balance + income {fmt(currentBalance+currentIncome)} — you're short {fmt(wbBillTotal-(currentBalance+currentIncome))}. Consider holding off on discretionary spending.</div>
+                    </div>
+                  </div>
+                )}
+                {nextWeekOver&&(
+                  <div style={{padding:"12px 14px",background:"#f59e0b12",border:"1px solid #f59e0b44",borderRadius:10,display:"flex",gap:10,alignItems:"flex-start"}}>
+                    <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
+                    <div>
+                      <div style={{fontSize:12,color:"#f59e0b",fontWeight:600,marginBottom:2}}>Heavy bills coming next week</div>
+                      <div style={{fontSize:11,color:"#f59e0b99"}}>Next week ({fmtDate(nextWeekStart)}–{fmtDate(nextWeekEnd)}) has {fmt(nextWeekBillTotal)} in bills vs projected balance + income {fmt(projectedBalanceWeek1+currentIncome)} — short {fmt(nextWeekBillTotal-(projectedBalanceWeek1+currentIncome))}. Spend carefully this week.</div>
+                    </div>
+                  </div>
+                )}
+                {!thisWeekOver&&nextWeekTight&&(
+                  <div style={{padding:"12px 14px",background:"#f59e0b0a",border:"1px solid #f59e0b33",borderRadius:10,display:"flex",gap:10,alignItems:"flex-start"}}>
+                    <span style={{fontSize:15,flexShrink:0}}>💡</span>
+                    <div style={{fontSize:11,color:"#f59e0b99"}}>Next week leaves only {fmt(nextWeekAvailable)} after bills — consider saving some of this week's available budget.</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── 4 Summary Boxes ── */}
+            <div className="grid-budget" style={{gap:12,marginBottom:20}}>
+              {/* Box 0: Current Balance */}
+              <div className="budget-box" style={{border:`1px solid ${currentBalance>=0?"#60a5fa33":"#f8717133"}`}}>
+                <div className="accent" style={{background:`linear-gradient(90deg,${currentBalance>=0?"#60a5fa":"#f87171"},${currentBalance>=0?"#60a5fa44":"#f8717144"})`}}/>
+                <div style={{fontSize:10,color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>
+                  {wbAccount==="all"?"Total Balance":acctById(wbAccount).label}
+                </div>
+                <div style={{fontSize:22,fontWeight:700,color:currentBalance>=0?"#60a5fa":"#f87171",fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em"}}>{fmt(currentBalance)}</div>
+                <div style={{fontSize:10,color:"#555",marginTop:4}}>Current account balance</div>
+              </div>
+
+              {/* Box 1: Weekly Income — per account or global */}
+              <div className="budget-box" style={{border:"1px solid #4ade8033"}}>
+                <div className="accent" style={{background:"linear-gradient(90deg,#4ade80,#4ade8044)"}}/>
+                <div style={{fontSize:10,color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>
+                  {wbAccount==="all"?"Total Income":acctById(wbAccount).label+" Income"}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{color:"#555",fontSize:15,fontWeight:300}}>$</span>
+                  {wbAccount==="all"?(
+                    <span style={{color:"#4ade80",fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:700,letterSpacing:"-0.02em"}}>{currentIncome.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                  ):(
+                    <input type="number" min="0" step="0.01"
+                      value={wb.incomeByAccount?.[wbAccount]??wb.income}
+                      onChange={e=>setWb(prev=>({...prev,incomeByAccount:{...(prev.incomeByAccount||{}), [wbAccount]:parseFloat(e.target.value)||0}}))}
+                      style={{background:"none",border:"none",color:"#4ade80",fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:700,width:"100%",letterSpacing:"-0.02em"}}/>
+                  )}
+                </div>
+                <div style={{fontSize:10,color:"#555",marginTop:4}}>
+                  {wbAccount==="all"?"Sum of all account incomes":"Tap to edit this account's income"}
+                </div>
+              </div>
+
+              {/* Box 2: Expected Bills */}
+              <div className="budget-box" style={{border:`1px solid ${thisWeekOver?"#f8717166":"#f8717133"}`}}>
+                <div className="accent" style={{background:`linear-gradient(90deg,#f87171,#f8717144)`}}/>
+                <div style={{fontSize:10,color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>Bills This Week</div>
+                <div style={{fontSize:22,fontWeight:700,color:"#f87171",fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em"}}>
+                  −{fmt(wbBillTotal)}
+                  {thisWeekOver&&<span style={{fontSize:12,marginLeft:6}}>⚠️</span>}
+                </div>
+                <div style={{fontSize:10,color:"#555",marginTop:4,lineHeight:1.5}}>
+                  {weekSchedBills.length>0?weekSchedBills.map(b=>b.desc).join(", "):"No bills this week"}
+                </div>
+              </div>
+
+              {/* Box 3: Projected end-of-week balance */}
+              <div className="budget-box" style={{border:`1px solid ${projectedBalanceWeek1>=0?"#7c6fff33":"#f8717166"}`}}>
+                <div className="accent" style={{background:`linear-gradient(90deg,${projectedBalanceWeek1>=0?"#7c6fff":"#f87171"},${projectedBalanceWeek1>=0?"#7c6fff44":"#f8717144"})`}}/>
+                <div style={{fontSize:10,color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:8}}>End of Week Est.</div>
+                <div style={{fontSize:22,fontWeight:700,color:projectedBalanceWeek1>=0?"#7c6fff":"#f87171",fontFamily:"'Syne',sans-serif",letterSpacing:"-0.02em"}}>{fmt(projectedBalanceWeek1)}</div>
+                <div style={{fontSize:10,color:"#555",marginTop:4}}>Balance + income − bills − spent</div>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            {wbAvailable>0&&(
+              <div style={{marginBottom:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#555",marginBottom:5}}>
+                  <span>Spent {Math.min(100,Math.round((wbSpent/wbAvailable)*100))}% of available</span>
+                  <span style={{color:wbRemaining>=0?"#4ade80":"#f87171"}}>{fmt(wbRemaining)} left</span>
+                </div>
+                <div style={{height:6,background:"#1e1e30",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${Math.min(100,(wbSpent/wbAvailable)*100)}%`,background:wbRemaining>=0?"#f59e0b":"#f87171",borderRadius:3,transition:"width .4s ease"}}/>
+                </div>
+              </div>
+            )}
+
+            {/* ── 2-Week Outlook ── */}
+            <div style={{marginBottom:20,padding:"14px 16px",background:"#0d0d18",borderRadius:12,border:"1px solid #1e1e30"}}>
+              <div style={{fontSize:11,color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12}}>2-Week Outlook</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {/* This week column */}
+                <div style={{padding:"12px",background:"#11111c",borderRadius:10,border:`1px solid ${thisWeekOver?"#f8717144":"#1e1e30"}`}}>
+                  <div style={{fontSize:10,color:"#7c6fff",fontWeight:600,marginBottom:8,letterSpacing:"0.04em"}}>THIS WEEK</div>
+                  <div style={{fontSize:10,color:"#555",marginBottom:6}}>{fmtDate(weekStart)} — {fmtDate(weekEnd)}</div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,gap:4}}>
+                    <span style={{color:"#555"}}>Balance</span><span style={{color:currentBalance>=0?"#60a5fa":"#f87171"}}>{fmt(currentBalance)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginTop:3,gap:4}}>
+                    <span style={{color:"#555"}}>+ Income</span><span style={{color:"#4ade80"}}>+{fmt(currentIncome)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginTop:3,gap:4}}>
+                    <span style={{color:"#555"}}>− Bills</span><span style={{color:"#f87171"}}>−{fmt(wbBillTotal)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginTop:3,gap:4}}>
+                    <span style={{color:"#555"}}>− Spent</span><span style={{color:"#f59e0b"}}>−{fmt(wbSpent)}</span>
+                  </div>
+                  <div style={{height:1,background:"#1e1e30",margin:"8px 0"}}/>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:600}}>
+                    <span style={{color:"#aaa"}}>Est. End Balance</span>
+                    <span style={{color:projectedBalanceWeek1>=0?"#4ade80":"#f87171"}}>{fmt(projectedBalanceWeek1)}</span>
+                  </div>
+                  {thisWeekOver&&<div style={{fontSize:9,color:"#f87171",marginTop:4}}>⚠ bills exceed balance + income</div>}
+                </div>
+                {/* Next week column */}
+                <div style={{padding:"12px",background:"#11111c",borderRadius:10,border:`1px solid ${nextWeekOver?"#f59e0b44":nextWeekTight?"#f59e0b22":"#1e1e30"}`}}>
+                  <div style={{fontSize:10,color:"#34d399",fontWeight:600,marginBottom:8,letterSpacing:"0.04em"}}>NEXT WEEK</div>
+                  <div style={{fontSize:10,color:"#555",marginBottom:6}}>{fmtDate(nextWeekStart)} — {fmtDate(nextWeekEnd)}</div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,gap:4}}>
+                    <span style={{color:"#555"}}>Start Balance</span><span style={{color:projectedBalanceWeek1>=0?"#60a5fa":"#f87171"}}>{fmt(projectedBalanceWeek1)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginTop:3,gap:4}}>
+                    <span style={{color:"#555"}}>+ Income</span><span style={{color:"#4ade80"}}>+{fmt(currentIncome)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginTop:3,gap:4}}>
+                    <span style={{color:"#555"}}>− Bills</span><span style={{color:"#f87171"}}>−{fmt(nextWeekBillTotal)}</span>
+                  </div>
+                  {nextWeekBills.length>0&&(
+                    <div style={{fontSize:9,color:"#555",marginTop:2,lineHeight:1.4}}>{nextWeekBills.map(b=>`${b.desc} (${b.dueDate.slice(5)})`).join(", ")}</div>
+                  )}
+                  <div style={{height:1,background:"#1e1e30",margin:"8px 0"}}/>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:600}}>
+                    <span style={{color:"#aaa"}}>Est. End Balance</span>
+                    <span style={{color:projectedBalanceWeek2>=0?"#4ade80":"#f87171"}}>{fmt(projectedBalanceWeek2)}</span>
+                  </div>
+                  {nextWeekOver&&<div style={{fontSize:9,color:"#f87171",marginTop:4}}>⚠ may go negative</div>}
+                  {!nextWeekOver&&nextWeekTight&&<div style={{fontSize:9,color:"#f59e0b",marginTop:4}}>💡 tight week ahead</div>}
+                </div>
+              </div>
+              {/* 2-week summary */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,padding:"10px 12px",background:"#11111c",borderRadius:8,border:"1px solid #1e1e30"}}>
+                <span style={{fontSize:11,color:"#555"}}>Projected balance in 2 weeks</span>
+                <span style={{fontSize:14,fontWeight:700,color:projectedBalanceWeek2>=0?"#e8e6f0":"#f87171",fontFamily:"'Syne',sans-serif"}}>{fmt(projectedBalanceWeek2)}</span>
+              </div>
+            </div>
+
+            <div className="grid-weekly">
+              {/* Bills Due This Week */}
+              <div>
+                <div style={{fontSize:11,color:"#555",letterSpacing:"0.1em",marginBottom:10,textTransform:"uppercase"}}>Bills Due This Week</div>
+                <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:10}}>
+                  {weekSchedBills.length===0&&<div style={{fontSize:12,color:"#555",padding:"10px 0"}}>No bills this week</div>}
+                  {weekSchedBills.map((b,i)=>{
+                    const acct=acctById(b.account);
+                    return(
+                      <div key={b.id+i} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 11px",background:"#11111c",border:"1px solid #1e1e30",borderRadius:9}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,color:"#ccc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.desc}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:5,marginTop:2}}>
+                            <span style={{fontSize:10,color:"#555"}}>Due {b.dueDate.slice(5)}</span>
+                            <span className="acct-chip" style={{background:`${acct.color}18`,borderColor:`${acct.color}33`,color:acct.color}}>{acct.label}</span>
+                          </div>
+                        </div>
+                        <div style={{fontSize:12,color:"#f87171",flexShrink:0,fontWeight:500}}>−{fmt(b.amount)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{fontSize:11,color:"#555",padding:"9px 11px",background:"#0d0d18",borderRadius:9,border:"1px dashed #2a2a40"}}>
+                  From <button onClick={()=>setView("scheduled")} style={{background:"none",border:"none",color:"#7c6fff",cursor:"pointer",fontFamily:"DM Mono",fontSize:11,padding:0,textDecoration:"underline"}}>Scheduled Payments</button>
+                </div>
+              </div>
+
+              {/* Weekly Transactions */}
+              <div>
+                <div style={{fontSize:11,color:"#555",letterSpacing:"0.1em",marginBottom:10,textTransform:"uppercase"}}>This Week's Spending</div>
+                <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:10,maxHeight:220,overflowY:"auto"}}>
+                  {[...wb.weekTx].filter(t=>wbAccount==="all"||t.account===wbAccount).sort((a,b)=>new Date(b.date)-new Date(a.date)).map(t=>(
+                    <div key={t.id} className="week-tx-row">
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,color:"#ccc",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.desc}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:1}}>
+                          <span style={{fontSize:10,color:"#555"}}>{t.date}</span>
+                          {wbAccount==="all"&&t.account&&(()=>{const a=acctById(t.account);return<span style={{fontSize:9,color:a.color,background:`${a.color}18`,padding:"1px 5px",borderRadius:999}}>{a.label}</span>;})()}
+                        </div>
+                      </div>
+                      <div style={{fontSize:12,color:"#f87171",flexShrink:0}}>−{fmt(t.amount)}</div>
+                      <button onClick={()=>deleteWbTx(t.id)} className="btn-sm" style={{flexShrink:0}}>×</button>
+                    </div>
+                  ))}
+                  {wb.weekTx.length===0&&<div style={{fontSize:12,color:"#555",padding:"10px 0"}}>No transactions yet</div>}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                  <input type="date" className="input-field" style={{fontSize:12}} value={wtxForm.date} onChange={e=>setWtxForm(f=>({...f,date:e.target.value}))}/>
+                  <input className="input-field" style={{fontSize:12}} placeholder="What did you spend on?" value={wtxForm.desc} onChange={e=>setWtxForm(f=>({...f,desc:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addWbTx()}/>
+                  <div style={{display:"flex",gap:7}}>
+                    <input className="input-field" style={{fontSize:12}} type="number" min="0" step="0.01" placeholder="Amount" value={wtxForm.amount} onChange={e=>setWtxForm(f=>({...f,amount:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addWbTx()}/>
+                    <button onClick={addWbTx} className="btn-primary" style={{padding:"10px 16px",flexShrink:0}}>Add</button>
+                  </div>
+                  {wbAccount==="all"&&(
+                    <div style={{fontSize:10,color:"#555"}}>
+                      Transaction will be assigned to <strong style={{color:"#aaa"}}>{acctById(accounts[0]?.id||"chk1").label}</strong> — select an account above to assign to a specific one
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ CATEGORIES ═════════════════════════════════════════════ */}
+        {view==="cats"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div><div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800}}>Categories</div><div style={{fontSize:11,color:"#555",marginTop:4}}>{categories.length} total · {categories.filter(c=>!c.builtIn).length} custom</div></div>
+              <button className="btn-primary" onClick={()=>setCatModal("new")}>+ New</button>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:7}}>
+              {categories.map(c=>{
+                const txCount=transactions.filter(t=>t.category===c.id).length;
+                return(
+                  <div key={c.id} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px",background:"#11111c",border:"1px solid #1e1e30",borderRadius:12}}>
+                    <div style={{width:38,height:38,borderRadius:10,background:`${c.color}22`,border:`1px solid ${c.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{c.icon}</div>
+                    <div style={{flex:1}}><div style={{fontSize:13,color:c.color,fontWeight:500}}>{c.label}</div><div style={{fontSize:11,color:"#555",marginTop:2}}>{txCount} transaction{txCount!==1?"s":""} · {c.builtIn?"built-in":<span style={{color:"#7c6fff"}}>custom</span>}</div></div>
+                    <div style={{display:"flex",gap:5}}>
+                      <button onClick={()=>setCatModal(c)} className="btn-sm">edit</button>
+                      {!c.builtIn&&<button onClick={()=>handleDeleteCat(c.id)} className="btn-sm">del</button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{marginTop:16,padding:"14px 18px",background:"#11111c",borderRadius:12,border:"1px dashed #2a2a40",textAlign:"center"}}>
+              <button onClick={()=>setCatModal("new")} style={{background:"none",border:"none",color:"#7c6fff",cursor:"pointer",fontFamily:"DM Mono",fontSize:13}}>+ Create a new category</button>
+            </div>
+          </div>
+        )}
+      </div>{/* end page-content */}
+
+      {/* ── Bottom Tab Bar (mobile) ── */}
+      <nav className="bottom-nav">
+        {tabItems.map(({v,icon,label})=>(
+          <button key={v} className={`tab-btn ${view===v?"active":""}`} onClick={()=>goTo(v)}>
+            <span className="tab-icon">{icon}</span>
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* ── Google Sheets Settings ── */}
+      {settingsOpen&&(
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setSettingsOpen(false)}>
+          <div className="modal" style={{maxWidth:480}}>
+            <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:800,marginBottom:6}}>☁️ Google Sheets Sync</div>
+            <div style={{fontSize:11,color:"#555",marginBottom:18}}>Auto-saves to your Google Sheet 2 seconds after any change. Sync across all your devices.</div>
+            {sheetUrl&&(
+              <div style={{padding:"10px 14px",background:syncStatus==="error"?"#f8717110":"#4ade8010",border:`1px solid ${syncStatus==="error"?"#f8717133":"#4ade8033"}`,borderRadius:10,marginBottom:16,fontSize:11,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                <span style={{color:syncStatus==="error"?"#f87171":"#4ade80"}}>
+                  {syncStatus==="error"?"✗ Last sync failed":syncStatus==="syncing"?"⟳ Syncing…":lastSync?"✓ Last synced "+lastSync.toLocaleTimeString():"Connected — not synced yet"}
+                </span>
+                <button onClick={syncFromSheet} style={{background:"none",border:"none",color:"#7c6fff",cursor:"pointer",fontFamily:"DM Mono",fontSize:11,textDecoration:"underline",flexShrink:0}}>Sync now</button>
+              </div>
+            )}
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div>
+                <label className="lbl">Apps Script Web App URL</label>
+                <input className="input-field" placeholder="https://script.google.com/macros/s/…/exec"
+                  value={sheetUrlInput} onChange={e=>setSheetUrlInput(e.target.value)}/>
+              </div>
+              <div style={{padding:"12px 14px",background:"#0d0d18",borderRadius:10,border:"1px solid #1e1e30",fontSize:11,color:"#555",lineHeight:1.9}}>
+                <div style={{color:"#aaa",fontWeight:600,marginBottom:4}}>Setup steps:</div>
+                <div>1. Open your Google Sheet → <strong style={{color:"#e8e6f0"}}>Extensions → Apps Script</strong></div>
+                <div>2. Paste the <strong style={{color:"#e8e6f0"}}>LedgerScript.gs</strong> code and save</div>
+                <div>3. Click <strong style={{color:"#e8e6f0"}}>Deploy → New deployment</strong></div>
+                <div>4. Type: <strong style={{color:"#e8e6f0"}}>Web app</strong> · Execute as: <strong style={{color:"#e8e6f0"}}>Me</strong></div>
+                <div>5. Who has access: <strong style={{color:"#e8e6f0"}}>Anyone</strong> → Deploy</div>
+                <div>6. Copy the Web App URL and paste it above</div>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button className="btn-primary" style={{flex:1}} onClick={()=>saveSheetUrlAndConnect(sheetUrlInput)}>
+                  {sheetUrl?"Update & Reconnect":"Connect Sheet"}
+                </button>
+                {sheetUrl&&(
+                  <button onClick={()=>{saveSheetUrl("");setSheetUrl("");setSettingsOpen(false);showToast("Disconnected — data still saved locally",false);}}
+                    style={{background:"#1e1e30",border:"1px solid #f8717133",color:"#f87171",borderRadius:10,padding:"11px 14px",cursor:"pointer",fontFamily:"DM Mono",fontSize:12}}>
+                    Disconnect
+                  </button>
+                )}
+                <button onClick={()=>setSettingsOpen(false)}
+                  style={{background:"#1e1e30",border:"1px solid #2a2a40",color:"#888",borderRadius:10,padding:"11px 14px",cursor:"pointer",fontFamily:"DM Mono",fontSize:12}}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmModal&&<ConfirmModal {...confirmModal}/>}
+      {qaModal&&<QuickAddModal editing={qaModal==="new"?null:qaModal} accounts={accounts} categories={categories} onClose={()=>setQaModal(false)} onSave={handleSaveQa} onDelete={qaModal!=="new"?()=>handleDeleteQa(qaModal.id):undefined}/>}
+      {catModal&&<CategoryModal editing={catModal==="new"?null:catModal} onClose={()=>setCatModal(false)} onSave={handleSaveCat}/>}
+      {csvModal&&<CsvModal data={csvModal} accounts={accounts} categories={categories} onClose={()=>setCsvModal(false)} onConfirm={confirmCsvImport}/>}
+      {acctModal&&<AccountModal account={acctModal} onClose={()=>setAcctModal(false)} onSave={handleSaveAcct} onDelete={acctModal.id&&accounts.length>1?()=>handleDeleteAcct(acctModal.id):null}/>}
+      {xferModal&&<TransferModal accounts={accounts} onClose={()=>setXferModal(false)} onSave={handleTransfer}/>}
+      {schedModal&&<SchedModal editing={schedModal==="new"?null:schedModal} accounts={accounts} categories={categories} onClose={()=>setSchedModal(false)} onSave={handleSaveSched}/>}
+
+      {toast&&<div className="toast" style={{borderColor:toast.ok?"#4ade8044":"#f8717144",color:toast.ok?"#4ade80":"#f87171"}}>{toast.msg}</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
