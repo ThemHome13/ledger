@@ -716,23 +716,20 @@ function App(){
     if(!sheetUrl){syncReady.current=true;return;}
     const hasLocalData=!!localStorage.getItem(TX_KEY);
     if(hasLocalData){
-      // This browser already has data — it's the source of truth, writes are safe
       syncReady.current=true;
     } else {
-      // Fresh browser — pull from sheet first
       setSyncStatus("syncing");
-      syncFromSheet(true).then((sheetHadData)=>{
-        syncReady.current=true;
-        // If sheet had no data and this is a fresh browser, don't auto-write defaults
-        // User needs to manually push from their main device first
-        if(!sheetHadData){
-          setSyncStatus("idle");
-        }
+      syncFromSheet(true).then(()=>{
+        // Wait 3s after read completes before allowing any writes
+        // This ensures React has re-rendered with sheet data and
+        // the write debounce closure captures the correct values
+        setTimeout(()=>{ syncReady.current=true; }, 3000);
       });
     }
   },[]);
 
-  // Debounced sync to Google Sheets (waits 2s after last change, only if syncReady)
+  // Debounced sync to Google Sheets — only fires if syncReady AND
+  // we use a fresh read of state inside syncToSheet (not closure values)
   useEffect(()=>{
     if(!sheetUrl||!syncReady.current)return;
     clearTimeout(syncTimer.current);
@@ -742,16 +739,21 @@ function App(){
 
   async function syncToSheet(){
     if(!sheetUrl||!syncReady.current){return;}
+    // Read fresh data from localStorage — always current, never stale from closure
+    const freshTx       = load(TX_KEY,   []);
+    const freshSched    = load(SCHED_KEY, []);
+    const freshAccts    = load(ACCT_KEY,  DEFAULT_ACCOUNTS);
+    const freshCats     = load(CAT_KEY,   DEFAULT_CATEGORIES);
+    const freshWb       = load(WB_KEY,    {income:0,incomeByAccount:{},bills:[],weekTx:[]});
     setSyncStatus("syncing");
     try{
       await sheetWrite(sheetUrl,{
-        transactions,
-        scheduled,
-        accounts,
-        categories,
-        weekly_budget:encodeWb(wb),
+        transactions:   freshTx,
+        scheduled:      freshSched,
+        accounts:       freshAccts,
+        categories:     freshCats,
+        weekly_budget:  encodeWb(freshWb),
       });
-      // Wait briefly then verify with a read-back
       await new Promise(r=>setTimeout(r,1500));
       const verify=await sheetRead(sheetUrl);
       const savedCount=verify?.transactions?.length??-1;
